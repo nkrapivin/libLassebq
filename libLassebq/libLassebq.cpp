@@ -14,7 +14,7 @@ YYVAR** g_BuiltinFuncs;
 YYVAR** g_Variables;
 YYGMLFunc* g_GMLScripts;
 CRoom** g_RunRoom;
-RFunction* g_RFunctionTable;
+RFunction** g_RFunctionTable;
 int* g_RFunctionTableLen;
 CInstance* g_Self;
 const char** g_WorkingDirectory;
@@ -24,9 +24,33 @@ int g_BuiltinFuncSize;
 int g_GMLScriptsSize;
 int g_VariablesSize;
 int* g_CurrentRoom;
+char g_StopPending = '\0';
 GML_CallLegacyFunction call;
 
-RValue Result;
+RValue Result(0.0);
+
+void lassebq_drawGUI_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
+{
+	// TODO: somehow cache function handles?
+	int draw_text = lassebq_find_builtin("draw_text");
+	int draw_set_font = lassebq_find_builtin("draw_set_font");
+	int draw_set_color = lassebq_find_builtin("draw_set_color");
+
+	RValue text_x(64.0);
+	RValue text_y(128.0);
+	RValue text_string("gruppa krovi na rukave, moi poryadkoviy nomer na rukave...\npozhelai mne udachi.... pozhelai mne...");
+	RValue text_color(16777215.0); // c_white
+
+	// don forget
+	g_Self = _pSelf;
+
+	// set draw settings.
+	lassebq_callb(draw_set_font, { EtoI(GameFonts::font_folderbold) });
+	lassebq_callb(draw_set_color, { text_color });
+
+	// lel.
+	lassebq_callb(draw_text, { text_x, text_y, text_string });
+}
 
 void clearConsole()
 {
@@ -87,6 +111,19 @@ int lassebq_find_builtin(const char* name)
 	return -1;
 }
 
+int lassebq_find_runtime(const char* name)
+{
+	for (int i = 0; i < *g_RFunctionTableLen; i++)
+	{
+		if (strcmp(name, (*g_RFunctionTable)[i].f_name) == 0)
+		{
+			return i;
+		}
+	}
+
+	return -1;
+}
+
 int lassebq_find_variable(const char* name)
 {
 	for (int i = 0; i < g_VariablesSize; i++)
@@ -133,12 +170,17 @@ int lassebq_get_current_room()
 	return *g_CurrentRoom;
 }
 
-void lassebq_callb(int id, std::list<RValue> args)
+void lassebq_callb(int id, const std::list<RValue>& args = { })
 {
 	CallGMLFunction(id, Result, args);
 }
 
-void lassebq_calls(int id, std::list<RValue> args, bool isObjectEvent = false)
+void lassebq_callr(int id, const std::list<RValue>& args = { })
+{
+	CallRFunction(id, Result, args);
+}
+
+void lassebq_calls(int id, const std::list<RValue>& args = { }, bool isObjectEvent = false)
 {
 	CallScriptFunction(id, Result, args, isObjectEvent);
 }
@@ -202,11 +244,7 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 	g_RunRoom = reinterpret_cast<CRoom**>(exeAsUint + Run_Room_Addr);
 	g_CurrentRoom = reinterpret_cast<int*>(exeAsUint + Current_Room_Addr);
 	g_RFunctionTableLen = reinterpret_cast<int*>(exeAsUint + RFunctionTableL_Addr);
-	g_RFunctionTable = *(reinterpret_cast<RFunction**>(exeAsUint + RFunctionTable_Addr));
-
-	std::vector<RFunction> funcs;
-
-	call = reinterpret_cast<GML_CallLegacyFunction>(CallBuiltin_Addr);
+	g_RFunctionTable = reinterpret_cast<RFunction**>(exeAsUint + RFunctionTable_Addr);
 
 	std::cout << "Thread is working..." << std::endl;
 	std::cout << "Base address: " << exeBase << std::endl;
@@ -221,9 +259,12 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 
 	std::cout << "Init done, type funny commands, get funny responses (or Access Violations)..." << std::endl;
 
+	std::string cmd;
+	CInstance* inst_global_con;
+
 	for (;;)
 	{
-		std::string cmd;
+		if (g_StopPending != '\0') break;
 		std::cout << PROMPT;
 		std::getline(std::cin, cmd);
 
@@ -232,21 +273,11 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 
 		if (cmd == "test")
 		{
-			for (int i = 0; i < *g_RFunctionTableLen; i++)
-			{
-				funcs.push_back(g_RFunctionTable[i]);
-			}
-
-			const char* fname = "room_get_name";
-			int func = lassebq_find_builtin(fname);
-			std::cout << fname << ": " << func << std::endl;
-
-			if (func != -1)
-			{
-				//lassebq_callb(func, { EtoI(GameSounds::song_youwillneverknow), 1, true });
-				lassebq_callb(func, { 10 });
-				std::cout << "Return value: " << Result.asString() << std::endl;
-			}
+			int audio_stop_all = lassebq_find_builtin("audio_stop_all");
+			int audio_play_sound = lassebq_find_builtin("audio_play_sound");
+			lassebq_callb(audio_stop_all);
+			lassebq_callb(audio_play_sound, { EtoI(GameSounds::song_youwillneverknow), 1, true });
+			std::cout << "return: " << Result.asString() << std::endl;
 		}
 		else if (cmd == "gmltest")
 		{
@@ -265,6 +296,21 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 				std::cout << "Return: " << Result.asString() << std::endl;
 			}
 		}
+		else if (cmd == "getvar")
+		{
+			// find obj_global_controller
+			const int obj_global_controller_INSTID = 100005;
+			inst_global_con = room->m_Active.m_pFirst;
+			// iterate!
+			while (inst_global_con->i_id != obj_global_controller_INSTID)
+				inst_global_con = inst_global_con->m_pNext;
+
+			// we found obj_global_con instance, do funny things
+			auto *evMap = inst_global_con->m_pObject->m_eventsMap;
+			GML_ObjectEvent nikGMLRoutine = lassebq_drawGUI_GMLRoutine;
+
+			// TODO: fix CEvent, figure out how to set event kind.
+		}
 		else if (cmd == "dumpgml")
 		{
 			std::ofstream dfs("dump.txt", std::ofstream::out | std::ofstream::trunc);
@@ -273,7 +319,7 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 				YYGMLFunc f = g_GMLScripts[i];
 				if (f.pName == nullptr || f.ptr == nullptr) break;
 				std::string start = std::string(f.pName).substr(0, 4);
-				if (start == "gml_" || start == "Timl") // gml OR timeline.
+				if (start == "gml_" || start == "Time") // gml OR timeline.
 				{
 					dfs << reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(f.ptr) - exeAsUint) << "|" << f.pName << std::endl;
 				}
@@ -290,7 +336,14 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 		{
 			clearConsole();
 		}
+		else if (cmd == "end")
+		{
+			int game_end = lassebq_find_builtin("game_end");
+			lassebq_callb(game_end);
+		}
 	}
+
+	return 0;
 }
 
 funcR lassebq_init()
@@ -300,10 +353,12 @@ funcR lassebq_init()
 
 funcR lassebq_shutdown()
 {
+	g_StopPending = '\1';
 	return 1.0;
 }
 
 funcV RegisterCallbacks(void* f1, void* f2, void* f3, void* f4)
 {
-	CreateThread(nullptr, 0, lassebq_cli, nullptr, 0, nullptr);
+	// we need a *large* stack (around 2-4 megs) because of GML arg stack stuff...
+	CreateThread(nullptr, 0x00040000, lassebq_cli, nullptr, 0, nullptr);
 }

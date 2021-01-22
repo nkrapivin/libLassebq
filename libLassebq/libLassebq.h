@@ -102,6 +102,18 @@ struct RefDynamicArrayOfRValue
 	int length;
 };
 
+struct YYVAR
+{
+	const char* pName;
+	int val;
+};
+
+struct YYGMLFunc
+{
+	const char* pName;
+	void* ptr;
+};
+
 #pragma pack( push, 4)
 class YYObjectBase;
 struct RValue
@@ -162,6 +174,15 @@ struct RValue
 		flags = 0;
 		kind = VALUE_PTR;
 		ptr = v;
+	}
+
+	RValue(const char* v)
+	{
+		flags = 0;
+		kind = VALUE_STRING;
+		pRefString = new RefString();
+		pRefString->m_thing = v;
+		pRefString->inc();
 	}
 
 	RValue& operator=(double v)
@@ -271,10 +292,27 @@ struct RValue
 					return std::nan("");
 				}
 			}
+			default: abort();
 		}
 	}
 
 };
+
+#define FREE_RValue(rvp) \
+	do                                                           \
+	{                                                            \
+		RValue *__p = ((rvp));                                   \
+		if ( ( (__p->kind - 1) & (MASK_KIND_RVALUE & ~3) ) == 0) \
+		{                                                        \
+			FREE_RValue__Pre(__p);                               \
+		}                                                        \
+		__p->flags = 0;                                          \
+		__p->kind = VALUE_UNDEFINED;                             \
+		__p->ptr = nullptr;                                      \
+	}                                                            \
+	while (false);                                                   
+
+
 
 enum eDeleteType : int {
 	eDelete_placementdelete = 3,
@@ -392,6 +430,12 @@ class CLayerElementBase {
 	CLayerElementBase * m_pPrev;
 };
 
+class CInstance;
+class CLayerInstanceElement : public CLayerElementBase {
+	int m_instanceID;
+	CInstance* m_pInstance;
+};
+
 class CLayer {
 	int m_id;
 	int m_depth;
@@ -408,23 +452,28 @@ class CLayer {
 	int m_shaderID;
 	CTimingSource m_timer;
 	LinkedList<CLayerElementBase> m_elements;
-	CLayer * m_pNext;
-	CLayer * m_pPrev;
+	CLayer* m_pNext;
+	CLayer* m_pPrev;
 };
 
+typedef unsigned int Hash;
+
+template<class K, class V, int I>
 class Element {
-	int k;
-	CLayer * v;
-	unsigned int h;
+public:
+	V v;
+	K k;
+	Hash hash;
 };
 
-//template<class T>
+template<class K, class V, int I = 3>
 class CHashMap {
+public:
 	int m_curSize;
 	int m_numUsed;
 	int m_curMask;
 	int m_growThreshold;
-	Element* m_elements;
+	Element<K, V, I>* m_elements;
 };
 
 template<class T>
@@ -446,10 +495,14 @@ class CInstanceBase
 public:
 	RValue*		yyvars;
 	virtual ~CInstanceBase() { };
-	virtual  RValue& GetYYVarRef(int index) = 0;
+	RValue& GetYYVarRef(int index)
+	{
+		// TODO: it's a bit more complicated than that?
+		return yyvars[index];
+	}
 };
 
-class YYObjectBase : CInstanceBase {
+class YYObjectBase : public CInstanceBase {
 public:
 	YYObjectBase * m_pNextObject;
 	YYObjectBase * m_pPrevObject;
@@ -460,7 +513,7 @@ public:
 	void(*m_getOwnProperty)(YYObjectBase *, RValue *, char *);
 	void(*m_deleteProperty)(YYObjectBase *, RValue *, char *, bool);
 	EJSRetValBool(*m_defineOwnProperty)(YYObjectBase *, char *, RValue *, bool);
-	CHashMap* m_yyvarsMap;
+	CHashMap<int,RValue*,3>* m_yyvarsMap;
 	unsigned int m_nvars;
 	unsigned int m_flags;
 	unsigned int m_capacity;
@@ -472,6 +525,8 @@ public:
 	int m_kind;
 	int m_rvalueInitType;
 	int m_curSlot;
+	char* m_pStackTrace;
+	//char* m_pVMStackTrace;
 };
 
 struct YYRECT {
@@ -530,11 +585,90 @@ struct CPhysicsDataGM {
 
 class CInstance;
 
-struct CObjectGM {
+enum eGML_TYPE : unsigned int {
+	eGMLT_ERROR = 0xffff0000,
+	eGMLT_NONE = 0x0,
+	eGMLT_DOUBLE = 0x1,
+	eGMLT_STRING = 0x2,
+	eGMLT_INT32 = 0x4
+};
+
+struct RToken {
+	int kind;
+	eGML_TYPE type;
+	int ind;
+	int ind2;
+	RValue value;
+	int itemnumb;
+	RToken* items;
+	int position;
+};
+
+class CCode {
+public:
+	//void* _vptr_CCode;
+	CCode* m_pNext;
+	int i_kind;
+	bool i_compiled;
+	char* i_str;
+	RToken i_token;
+	RValue i_value;
+	void* i_pVM;
+	void* i_pVMDebugInfo;
+	char* i_pCode;
+	char* i_pName;
+	int i_CodeIndex;
+	YYGMLFunc* i_pFunc;
+	bool i_watch;
+	int i_offset;
+	int i_locals;
+	int i_args;
+	int i_flags;
+};
+
+//int a = sizeof(CEvent);
+
+class CEvent {
+public:
+	//void* _vptr_pointer;
+	CCode* e_code;
+	int m_OwnerObjectID;
+
+	CEvent()
+	{
+		this->e_code = nullptr;
+		this->m_OwnerObjectID = 0;
+	}
+
+	~CEvent()
+	{
+
+	}
+
+	void Clear()
+	{
+		return;
+	}
+
+	bool Compile()
+	{
+		return true;
+	}
+
+	void Execute(CInstance* _self, CInstance* _other)
+	{
+
+	}
+};
+
+int a = sizeof(CEvent);
+
+class CObjectGM {
+public:
 	char * m_pName;
 	CObjectGM * m_pParent;
-	CHashMap * m_childrenMap;
-	CHashMap * m_eventsMap;
+	CHashMap<int,CObjectGM*,2> * m_childrenMap;
+	CHashMap<unsigned long long, CEvent*, 3> * m_eventsMap;
 	CPhysicsDataGM m_physicsData;
 	SLinkedList<CInstance> m_Instances;
 	SLinkedList<CInstance> m_Instances_Recursive;
@@ -546,7 +680,7 @@ struct CObjectGM {
 	int m_ID;
 };
 
-class CInstance : YYObjectBase {
+class CInstance : public YYObjectBase {
 public:
 	long long m_CreateCounter;
 	CObjectGM * m_pObject;
@@ -659,25 +793,13 @@ public:
 	char * m_pName;
 	bool m_isDuplicate;
 	LinkedList<CLayer> m_Layers;
-	CHashMap m_LayerLookup;
-	CHashMap m_LayerElementLookup;
+	CHashMap<int,CLayer*,7> m_LayerLookup;
+	CHashMap<int,CLayerElementBase*,7> m_LayerElementLookup;
 	CLayerElementBase * m_LastLayerElementLookedUp;
-	CHashMap m_LayerInstanceElementLookup;
+	CHashMap<int,CLayerInstanceElement*,7> m_LayerInstanceElementLookup;
 };
 
 #pragma pack(pop)
-
-struct YYVAR
-{
-	const char* pName;
-	int val;
-};
-
-struct YYGMLFunc
-{
-	const char* pName;
-	void* ptr;
-};
 
 extern YYVAR** g_BuiltinFuncs;
 extern YYGMLFunc* g_GMLScripts;
@@ -699,58 +821,66 @@ extern GML_CallLegacyFunction call;
 struct RFunction {
 	char f_name[64];
 	TRoutine f_routine;
-	int f_dummy;
 	int f_argnumb;
 	unsigned int m_UsageCount;
+	int f_FFFFFFFF; // always 0xFFFFFFFF
 };
 
 extern int* g_RFunctionTableLen;
-extern RFunction* g_RFunctionTable;
+extern RFunction** g_RFunctionTable;
 
-void CallGMLFunction(int id, RValue& ret, std::list<RValue>& args)
+void CallRFunction(int id, RValue& ret, const std::list<RValue>& args)
 {
 	if (id < 0) abort();
 
-	// do the magic.
-	YYVAR* myFunc = g_BuiltinFuncs[id];
-	RFunction RFunc = g_RFunctionTable[myFunc->val];
-	TRoutine TR = RFunc.f_routine;
+	RFunction RFunc = (*g_RFunctionTable)[id];
 	int i = 0;
 	int argc = args.size();
 
-	// prepare return memory.
-	RValue Result(0.0);
-	
 	// allocate arguments **on the stack! right here!!!**
 	RValue* ptr = reinterpret_cast<RValue*>(alloca(argc * sizeof(RValue)));
+	// we want to *copy* the arguments, not pass-by-ref.
 	for (RValue rv : args) {
 		ptr[i] = rv; i++;
 	}
 
-	// call the routine
-	TR(ret, g_Self, nullptr, argc, ptr);
+	RFunc.f_routine(ret, g_Self, nullptr, argc, ptr);
 }
 
-void CallScriptFunction(int id, RValue& ret, std::list<RValue>& args, bool isEvent = false)
+void CallGMLFunction(int id, RValue& ret, const std::list<RValue>& args)
 {
 	if (id < 0) abort();
 
-	// prepare argument memory.
-	RValue **Arguments = new RValue*[args.size()];
-	for (RValue& arg : args) { Arguments[0] = &arg; }
+	// do the magic.
+	CallRFunction(g_BuiltinFuncs[id]->val, ret, args);
+}
+
+void CallScriptFunction(int id, RValue& ret, const std::list<RValue>& args, bool isEvent = false)
+{
+	if (id < 0) abort();
 
 	// do the magic.
 	YYGMLFunc myFunc = g_GMLScripts[id];
 	if (isEvent)
 	{
-		reinterpret_cast<GML_ObjectEvent>(myFunc.ptr)(g_Self, g_Self);
+		// call
+		reinterpret_cast<GML_ObjectEvent>(myFunc.ptr)(g_Self, nullptr);
 	}
 	else
 	{
-		reinterpret_cast<GML_Script>(myFunc.ptr)(g_Self, g_Self, ret, args.size(), Arguments);
-	}
+		// prepare argument memory.
+		RValue **Arguments = nullptr;
+		if (args.size() > 0)
+		{
+			Arguments = new RValue*[args.size()];
+			int i = 0;
+			for (const RValue& arg : args) { Arguments[i] = const_cast<RValue*>(&arg); i++; }
+		}
 
-	// clean up.
-	delete[] Arguments;
-	Arguments = nullptr;
+		// call
+		reinterpret_cast<GML_Script>(myFunc.ptr)(g_Self, nullptr, ret, args.size(), Arguments);
+
+		// clean up.
+		if (Arguments != nullptr) delete[] Arguments;
+	}
 }
