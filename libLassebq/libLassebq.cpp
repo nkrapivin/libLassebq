@@ -24,33 +24,15 @@ int g_BuiltinFuncSize;
 int g_GMLScriptsSize;
 int g_VariablesSize;
 int* g_CurrentRoom;
-char g_StopPending = '\0';
 GML_CallLegacyFunction call;
 
+// RegisterCallback stuff
+GML_ds_map_create ds_map_create = nullptr;
+GML_ds_map_add_real ds_map_add_real = nullptr;
+GML_ds_map_add_string ds_map_add_string = nullptr;
+GML_create_async_event create_async_event = nullptr;
+
 RValue Result(0.0);
-
-void lassebq_drawGUI_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
-{
-	// TODO: somehow cache function handles?
-	int draw_text = lassebq_find_builtin("draw_text");
-	int draw_set_font = lassebq_find_builtin("draw_set_font");
-	int draw_set_color = lassebq_find_builtin("draw_set_color");
-
-	RValue text_x(64.0);
-	RValue text_y(128.0);
-	RValue text_string("gruppa krovi na rukave, moi poryadkoviy nomer na rukave...\npozhelai mne udachi.... pozhelai mne...");
-	RValue text_color(16777215.0); // c_white
-
-	// don forget
-	g_Self = _pSelf;
-
-	// set draw settings.
-	lassebq_callb(draw_set_font, { EtoI(GameFonts::font_folderbold) });
-	lassebq_callb(draw_set_color, { text_color });
-
-	// lel.
-	lassebq_callb(draw_text, { text_x, text_y, text_string });
-}
 
 void clearConsole()
 {
@@ -185,6 +167,29 @@ void lassebq_calls(int id, const std::list<RValue>& args = { }, bool isObjectEve
 	CallScriptFunction(id, Result, args, isObjectEvent);
 }
 
+void lassebq_drawGUI_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
+{
+	// TODO: somehow cache function handles?
+	int draw_text = lassebq_find_runtime("draw_text");
+	int draw_set_font = lassebq_find_runtime("draw_set_font");
+	int draw_set_color = lassebq_find_runtime("draw_set_color");
+
+	RValue text_x(128.0);
+	RValue text_y(128.0);
+	RValue text_string("gruppa krovi na rukave, moi poryadkoviy nomer na rukave...\npozhelai mne udachi.... pozhelai mne...");
+	RValue text_color(16777215.0); // c_white
+
+								   // don forget
+	g_Self = _pSelf;
+
+	// set draw settings.
+	lassebq_callr(draw_set_font, { EtoD(GameFonts::font_folderbold) });
+	lassebq_callr(draw_set_color, { text_color });
+
+	// lel.
+	lassebq_callr(draw_text, { text_x, text_y, text_string });
+}
+
 void allocConsoleQuick()
 {
 	FILE *__fDummy;
@@ -194,9 +199,10 @@ void allocConsoleQuick()
 
 	if (bResult == TRUE)
 	{
-		freopen_s(&__fDummy, "CONIN$", "r", stdin);
-		freopen_s(&__fDummy, "CONOUT$", "w", stderr);
-		freopen_s(&__fDummy, "CONOUT$", "w", stdout);
+		_wfreopen_s(&__fDummy, L"CONIN$", L"r", stdin);
+		_wfreopen_s(&__fDummy, L"CONOUT$", L"w", stderr);
+		_wfreopen_s(&__fDummy, L"CONOUT$", L"w", stdout);
+		SetConsoleTitle(TEXT("a cat in need is a cat indeed."));
 	}
 }
 
@@ -264,7 +270,6 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 
 	for (;;)
 	{
-		if (g_StopPending != '\0') break;
 		std::cout << PROMPT;
 		std::getline(std::cin, cmd);
 
@@ -276,7 +281,7 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 			int audio_stop_all = lassebq_find_builtin("audio_stop_all");
 			int audio_play_sound = lassebq_find_builtin("audio_play_sound");
 			lassebq_callb(audio_stop_all);
-			lassebq_callb(audio_play_sound, { EtoI(GameSounds::song_youwillneverknow), 1, true });
+			lassebq_callb(audio_play_sound, { EtoD(GameSounds::song_youwillneverknow), 1, true });
 			std::cout << "return: " << Result.asString() << std::endl;
 		}
 		else if (cmd == "gmltest")
@@ -310,10 +315,26 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 			GML_ObjectEvent nikGMLRoutine = lassebq_drawGUI_GMLRoutine;
 
 			// TODO: fix CEvent, figure out how to set event kind.
+			std::vector<Element<unsigned long long, CEvent*, 3>> elementVec;
+			auto* evArray = evMap->m_elements;
+			for (int i = 0; i < evMap->m_curSize; i++)
+			{
+				elementVec.push_back(evArray[i]);
+			}
+
+			std::cout << "getvar ok" << std::endl;
+		}
+		else if (cmd == "patchhud")
+		{
+			int obj_hud_DrawGUI = lassebq_find_script("gml_Object_obj_hud_Draw_64");
+			g_GMLScripts[obj_hud_DrawGUI].ptr = lassebq_drawGUI_GMLRoutine;
 		}
 		else if (cmd == "dumpgml")
 		{
 			std::ofstream dfs("dump.txt", std::ofstream::out | std::ofstream::trunc);
+			dfs << "_____________________________" << std::endl;
+			dfs << "ADDRESS | YYC CODE ENTRY NAME" << std::endl;
+			dfs << "________|____________________" << std::endl;
 			for (int i = 0; true; i++)
 			{
 				YYGMLFunc f = g_GMLScripts[i];
@@ -321,7 +342,7 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 				std::string start = std::string(f.pName).substr(0, 4);
 				if (start == "gml_" || start == "Time") // gml OR timeline.
 				{
-					dfs << reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(f.ptr) - exeAsUint) << "|" << f.pName << std::endl;
+					dfs << reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(f.ptr) - exeAsUint) << "|" << f.pName << std::endl;
 				}
 				else break;
 			}
@@ -338,8 +359,8 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 		}
 		else if (cmd == "end")
 		{
-			int game_end = lassebq_find_builtin("game_end");
-			lassebq_callb(game_end);
+			int game_end = lassebq_find_runtime("game_end");
+			lassebq_callr(game_end);
 		}
 	}
 
@@ -353,12 +374,17 @@ funcR lassebq_init()
 
 funcR lassebq_shutdown()
 {
-	g_StopPending = '\1';
 	return 1.0;
 }
 
-funcV RegisterCallbacks(void* f1, void* f2, void* f3, void* f4)
+funcV RegisterCallbacks(GML_create_async_event cae, GML_ds_map_create dmc, GML_ds_map_add_real dmar, GML_ds_map_add_string dmas)
 {
+	// set our callback stuff...
+	create_async_event = cae;
+	ds_map_create = dmc;
+	ds_map_add_real = dmar;
+	ds_map_add_string = dmas;
+
 	// we need a *large* stack (around 2-4 megs) because of GML arg stack stuff...
-	CreateThread(nullptr, 0x00040000, lassebq_cli, nullptr, 0, nullptr);
+	CreateThread(nullptr, 0x00400000, lassebq_cli, nullptr, 0, nullptr);
 }

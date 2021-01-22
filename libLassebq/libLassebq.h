@@ -9,11 +9,17 @@ extern HMODULE exeBase;
 
 #define ItoD(integer) (static_cast<double>((integer)))
 #define EtoI(e) (static_cast<signed int>((e)))
+#define EtoD(e) (static_cast<double>((e)))
 
 // Extension func defines.
 #define funcR extern "C" __declspec(dllexport) double       __cdecl 
 #define funcS extern "C" __declspec(dllexport) const char * __cdecl 
 #define funcV extern "C" __declspec(dllexport) void         __cdecl 
+
+typedef void(*GML_create_async_event)(int dsmapindex, int event_index);
+typedef int(*GML_ds_map_create)(int _num, ...);
+typedef bool(*GML_ds_map_add_string)(int _map, const char *_pKey, const char *_pValue);
+typedef bool(*GML_ds_map_add_real)(int _map, const char *_pKey, double _value);
 
 const int VALUE_REAL = 0;		// Real value
 const int VALUE_STRING = 1;		// String value
@@ -138,7 +144,7 @@ struct RValue
 	{
 		flags = 0;
 		kind = VALUE_UNSET;
-		ptr = nullptr;
+		v64 = 0L;
 	}
 
 	RValue(double v)
@@ -182,6 +188,7 @@ struct RValue
 		kind = VALUE_STRING;
 		pRefString = new RefString();
 		pRefString->m_thing = v;
+		pRefString->m_size = strlen(v) + 1;
 		pRefString->inc();
 	}
 
@@ -257,6 +264,36 @@ struct RValue
 		return tmp;
 	}
 
+	inline bool operator==(const RValue& rhs)
+	{
+		int lhsType = kind & MASK_KIND_RVALUE;
+		int rhsType = rhs.kind & MASK_KIND_RVALUE;
+
+		if (lhsType == VALUE_STRING && rhsType == VALUE_STRING)
+			return strcmp(pRefString->get(), rhs.pRefString->get()) == 0;
+
+		double lhsD = this->asReal();
+		double rhsD = 0.0;
+		switch (rhsType)
+		{
+			case VALUE_REAL:
+			case VALUE_BOOL: rhsD = rhs.val; break;
+			case VALUE_INT32: rhsD = static_cast<double>(rhs.v32); break;
+			case VALUE_INT64: rhsD = static_cast<double>(rhs.v64); break;
+			case VALUE_PTR: return static_cast<double>(reinterpret_cast<uintptr_t>(ptr)); break;
+			case VALUE_UNSET:
+			case VALUE_UNDEFINED: rhsD = std::nan(""); break;
+			default: abort(); break;
+		}
+
+		return lhsD == rhsD;
+	}
+
+	inline bool operator!=(const RValue& rhs)
+	{
+		return (!(operator==(rhs)));
+	}
+
 	std::string asString()
 	{
 		switch (kind & MASK_KIND_RVALUE)
@@ -264,7 +301,12 @@ struct RValue
 			case VALUE_REAL: return std::to_string(val);
 			case VALUE_INT32: return std::to_string(v32);
 			case VALUE_INT64: return std::to_string(v64);
-			//case VALUE_PTR: return std::to_string(ptr);
+			case VALUE_PTR: {
+				char buf[32] = { '\0' };
+				memset(buf, 0, sizeof(buf));
+				std::snprintf(buf, sizeof(buf), "%p", ptr);
+				return std::string(buf);
+			}
 			case VALUE_BOOL: return (val > 0.5) ? "true" : "false";
 			case VALUE_UNSET: return "<unset>"; // ??????????
 			case VALUE_UNDEFINED: return "<undefined>";
@@ -713,8 +755,8 @@ public:
 	YYRECT i_bbox;
 	int i_timer[12];
 	cInstancePathAndTimeline * m_pPathAndTimeline;
-	void * i_initcode;
-	void * i_precreatecode;
+	CCode * i_initcode;
+	CCode * i_precreatecode;
 	CObjectGM * m_pOldObject;
 	int m_nLayerID;
 	int i_maskindex;
