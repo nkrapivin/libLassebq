@@ -16,6 +16,23 @@ extern HMODULE exeBase;
 #define funcS extern "C" __declspec(dllexport) const char * __cdecl 
 #define funcV extern "C" __declspec(dllexport) void         __cdecl 
 
+enum class GML_async_event : int {
+	AsyncImageLoaded = 60,
+	AsyncSoundLoaded = 61,
+	AsyncHTTP = 62,
+	AsyncDialog = 63,
+	AsyncIAP = 66,
+	AsyncCloud = 67,
+	AsyncNetworking = 68,
+	AsyncSteam = 69,
+	AsyncSocial = 70,
+	AsyncPushNotification = 71,
+	AsyncSaveAndLoad = 72,
+	AsyncAudioRecording = 73,
+	AsyncAudioPlayback = 74,
+	AsyncSystem = 75
+};
+
 typedef void(*GML_create_async_event)(int dsmapindex, int event_index);
 typedef int(*GML_ds_map_create)(int _num, ...);
 typedef bool(*GML_ds_map_add_string)(int _map, const char *_pKey, const char *_pValue);
@@ -280,7 +297,7 @@ struct RValue
 			case VALUE_BOOL: rhsD = rhs.val; break;
 			case VALUE_INT32: rhsD = static_cast<double>(rhs.v32); break;
 			case VALUE_INT64: rhsD = static_cast<double>(rhs.v64); break;
-			case VALUE_PTR: return static_cast<double>(reinterpret_cast<uintptr_t>(ptr)); break;
+			case VALUE_PTR: rhsD = static_cast<double>(reinterpret_cast<uintptr_t>(ptr)); break;
 			case VALUE_UNSET:
 			case VALUE_UNDEFINED: rhsD = std::nan(""); break;
 			default: abort(); break;
@@ -363,11 +380,11 @@ enum eDeleteType : int {
 	eDelete_none = 0
 };
 
-typedef enum EJSRetValBool {
+enum EJSRetValBool {
 	EJSRVB_TRUE = 1,
 	EJSRVB_FALSE = 0,
 	EJSRVB_TYPE_ERROR = 2
-} EJSRetValBool;
+};
 
 template<class T>
 class cARRAY_STRUCTURE {
@@ -498,14 +515,38 @@ class CLayer {
 	CLayer* m_pPrev;
 };
 
+template<typename T>
+class HashNode {
+public:
+	HashNode<T>* m_pPrev;
+	HashNode<T>* m_pNext;
+	unsigned int m_ID;
+	T* m_pObj;
+};
+
+template<typename T>
+class HashLink {
+public:
+	T* m_pFirst;
+	T* m_pLast;
+};
+
+template<typename T>
+class CHash {
+public:
+	HashLink<HashNode<T>> *m_pHashingTable;
+	int m_HashingMask;
+	int m_Count;
+};
+
 typedef unsigned int Hash;
 
 template<class K, class V, int I>
 class Element {
 public:
-	V v;
-	K k;
-	Hash hash;
+	V v; // Value
+	K k; // Key
+	Hash hash; // Hash
 };
 
 template<class K, class V, int I = 3>
@@ -647,8 +688,8 @@ struct RToken {
 };
 
 class CCode {
+	virtual ~CCode() { };
 public:
-	//void* _vptr_CCode;
 	CCode* m_pNext;
 	int i_kind;
 	bool i_compiled;
@@ -668,7 +709,7 @@ public:
 	int i_flags;
 };
 
-//int a = sizeof(CEvent);
+int a = sizeof(CCode);
 
 class CEvent {
 public:
@@ -703,7 +744,7 @@ public:
 	}
 };
 
-int a = sizeof(CEvent);
+//int a = sizeof(CEvent);
 
 class CObjectGM {
 public:
@@ -848,6 +889,7 @@ extern YYGMLFunc* g_GMLScripts;
 extern YYVAR** g_Variables;
 extern CRoom** g_RunRoom;
 extern CInstance* g_Self;
+extern CHash<CObjectGM>** g_ObjectHashTable;
 extern const char** g_WorkingDirectory;
 extern const char** g_GameName;
 extern const char** g_CommandLine;

@@ -19,3 +19,4 @@
 #define CommandLine_Addr      (0x01CF8944u)
 #define Run_Room_Addr         (0x01CF88D8u)
 #define Current_Room_Addr     (0x01CF8900u)
+#define Object_Hash_Addr      (0x01AE769cu)
