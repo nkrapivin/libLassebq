@@ -13,10 +13,10 @@
 #define RFunctionTableL_Addr  (0x01CFCB58u)
 #define Variable_Addr         (0x01A37CF8u)
 #define GMLScript_Addr        (0x01A3C6F4u)
-#define CallBuiltin_Addr      (0x014DB190u)
-#define WorkingDirectory_Addr (0x01CF894Cu)
-#define GameName_Addr         (0x01CF8948u)
-#define CommandLine_Addr      (0x01CF8944u)
 #define Run_Room_Addr         (0x01CF88D8u)
 #define Current_Room_Addr     (0x01CF8900u)
-#define Object_Hash_Addr      (0x01AE769cu)
+#define Object_Hash_Addr      (0x01AE769Cu)
+
+// may be wrong section:
+#define Object_Has_Event_Addr (0x01D20220u)
+#define Object_Num_Event_Addr (0x01D27A20u)

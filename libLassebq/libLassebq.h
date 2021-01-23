@@ -1,5 +1,6 @@
 #pragma once
 #include "stdafx.h"
+#include "pcre\include\pcre.h"
 #include <vector>
 #include <string>
 #include <iostream>
@@ -190,6 +191,13 @@ struct RValue
 		flags = 0;
 		kind = VALUE_INT64;
 		v64 = v;
+	}
+
+	RValue(std::nullptr_t)
+	{
+		flags = 0;
+		kind = VALUE_PTR;
+		ptr = nullptr;
 	}
 
 	RValue(void* v)
@@ -573,6 +581,12 @@ struct SLinkedList {
 	int m_Count;
 };
 
+struct DynamicArrayOfInteger {
+	int length;
+	//char pad[sizeof(int)];
+	int* arr;
+};
+
 class CInstanceBase
 {
 public:
@@ -590,8 +604,8 @@ public:
 	YYObjectBase * m_pNextObject;
 	YYObjectBase * m_pPrevObject;
 	YYObjectBase * m_prototype;
-	void * m_pcre;
-	void * m_pcreExtra;
+	pcre* m_pcre;
+	pcre_extra* m_pcreExtra;
 	char * m_class;
 	void(*m_getOwnProperty)(YYObjectBase *, RValue *, char *);
 	void(*m_deleteProperty)(YYObjectBase *, RValue *, char *, bool);
@@ -890,16 +904,13 @@ extern YYVAR** g_Variables;
 extern CRoom** g_RunRoom;
 extern CInstance* g_Self;
 extern CHash<CObjectGM>** g_ObjectHashTable;
-extern const char** g_WorkingDirectory;
-extern const char** g_GameName;
-extern const char** g_CommandLine;
+extern DynamicArrayOfInteger* g_ObjectHasEvent;
+extern int* g_ObjectNumEvent;
 extern int* g_CurrentRoom;
 
-typedef RValue&(*GML_CallLegacyFunction)(CInstance* _pSelf, CInstance* _pOther, RValue &_result, int _argc, int _id, RValue **_args);
 typedef void(*GML_ObjectEvent)(CInstance* _pSelf, CInstance* _pOther);
 typedef RValue&(*GML_Script)(CInstance* _pSelf, CInstance* _pOther, RValue& _result, int _count, RValue** _args);
 typedef void(*TRoutine)(RValue& _result, CInstance* _pSelf, CInstance* _pOther, int _argc, RValue *_args);
-extern GML_CallLegacyFunction call;
 
 
 struct RFunction {
