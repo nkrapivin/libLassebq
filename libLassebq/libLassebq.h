@@ -3,8 +3,10 @@
 #include "pcre\include\pcre.h"
 #include <vector>
 #include <string>
+#include <sstream>
 #include <iostream>
 #include <list>
+#include <memory>
 
 extern HMODULE exeBase;
 
@@ -39,24 +41,38 @@ typedef int(*GML_ds_map_create)(int _num, ...);
 typedef bool(*GML_ds_map_add_string)(int _map, const char *_pKey, const char *_pValue);
 typedef bool(*GML_ds_map_add_real)(int _map, const char *_pKey, double _value);
 
-const int VALUE_REAL = 0;		// Real value
-const int VALUE_STRING = 1;		// String value
-const int VALUE_ARRAY = 2;		// Array value
-const int VALUE_OBJECT = 6;	// YYObjectBase* value 
-const int VALUE_INT32 = 7;		// Int32 value
-const int VALUE_UNDEFINED = 5;	// Undefined value
-const int VALUE_PTR = 3;			// Ptr value
-const int VALUE_VEC3 = 4;		// Vec3 (x,y,z) value (within the RValue)
-const int VALUE_VEC4 = 8;		// Vec4 (x,y,z,w) value (allocated from pool)
-const int VALUE_VEC44 = 9;		// Vec44 (matrix) value (allocated from pool)
-const int VALUE_INT64 = 10;		// Int64 value
-const int VALUE_ACCESSOR = 11;	// Actually an accessor
-const int VALUE_NULL = 12;	// JS Null
-const int VALUE_BOOL = 13;	// Bool value
-const int VALUE_ITERATOR = 14;	// JS For-in Iterator
-const int VALUE_REF = 15;		// Reference value (uses the ptr to point at a RefBase structure)
-#define MASK_KIND_RVALUE	0x0ffffff
-const int VALUE_UNSET = MASK_KIND_RVALUE;
+#define MASK_KIND_RVALUE (0x0ffffff)
+enum RValueType : int {
+	VALUE_REAL = 0,
+	VALUE_STRING = 1,
+	VALUE_ARRAY = 2,
+	VALUE_PTR = 3,
+	VALUE_VEC3 = 4,
+	VALUE_UNDEFINED = 5,
+	VALUE_OBJECT = 6,
+	VALUE_INT32 = 7,
+	VALUE_VEC4 = 8,
+	VALUE_MATRIX = 9,
+	VALUE_INT64 = 10,
+	VALUE_ACCESSOR = 11,
+	VALUE_JSNULL = 12,
+	VALUE_BOOL = 13,
+	VALUE_ITERATOR = 14,
+	VALUE_REF = 15,
+	VALUE_UNSET = MASK_KIND_RVALUE
+};
+
+enum YYOBJECTBASE_KIND : int {
+	YYOBJECTBASE = 0,
+	CINSTANCE = 1,
+	ACCESSOR = 2,
+	SCRIPTREF = 3
+};
+
+enum YYVAR_ACCESSOR_KIND : int {
+	YYVAR_ACCESSOR_GET = 0,
+	YYVAR_ACCESSOR_SET = 1
+};
 
 struct vec3
 {
@@ -79,8 +95,8 @@ const int ERV_Configurable = (1 << 1);
 const int ERV_Writable = (1 << 2);
 const int ERV_Owned = (1 << 3);
 
-#define JS_BUILTIN_PROPERTY_DEFAULT				(ERV_Writable | ERV_Configurable )
-#define JS_BUILTIN_LENGTH_PROPERTY_DEFAULT		(ERV_None)
+#define JS_BUILTIN_PROPERTY_DEFAULT        (ERV_Writable | ERV_Configurable)
+#define JS_BUILTIN_LENGTH_PROPERTY_DEFAULT (ERV_None)
 
 template <typename T > struct _RefThing
 {
@@ -109,6 +125,7 @@ template <typename T > struct _RefThing
 };
 
 typedef _RefThing<const char*> RefString;
+typedef _RefThing<void*> RefKeep;
 
 struct RValue;
 struct DynamicArrayOfRValue
@@ -121,7 +138,7 @@ struct RefDynamicArrayOfRValue
 {
 	int	refcount;
 	DynamicArrayOfRValue* pArray;
-	void* pOwner;
+	RValue* pOwner;
 	int visited;
 	int length;
 };
@@ -140,11 +157,25 @@ struct YYGMLFunc
 
 #pragma pack( push, 4)
 class YYObjectBase;
+int lassebq_find_runtime(const char* name);
+
+#define VARIABLE_ARRAY_MAX_DIMENSION (32000)
+#define ARRAY_INDEX_NO_INDEX         (INT_MIN)
+#define POINTER_INVALID              (reinterpret_cast<void *>(-1))
+#define POINTER_NULL                 (nullptr)
+
+typedef void(*FREE_RVal_Pre)(RValue* p);
+typedef void(*YYSetStr)(RValue* _pVal, const char* _pS);
+extern FREE_RVal_Pre FREE_RValue__Pre;
+extern YYSetStr YYSetString;
+
+// copies one RValue into another keeping stuff like references and GC in mind.
+void COPY_RValue__Post(RValue* _pDest, const RValue* _pSource);
 struct RValue
 {
 	union {
 		int v32;
-		long long v64;
+		long long v64 = 0L;
 		double	val;						// value when real
 		union {
 			void* ptr;
@@ -155,14 +186,37 @@ struct RValue
 			matrix44* pMatrix44;
 		};
 	};
-	int		flags;							// use for flags (Hijack for Enumerable and Configurable bits in JavaScript)  (Note: probably will need a visibility as well, to support private variables that are promoted to object scope, but should not be seen (is that just not enumerated????) )
-	int		kind;							// kind of value
+	int flags = 0; // use for flags (Hijack for Enumerable and Configurable bits in JavaScript)  (Note: probably will need a visibility as well, to support private variables that are promoted to object scope, but should not be seen (is that just not enumerated????) )
+	int kind = 0; // kind of value
+
+	void __localFree(void)
+	{
+		if (((kind - 1) & (MASK_KIND_RVALUE & (~3))) == 0) {
+			FREE_RValue__Pre(this);
+		}
+	}
+
+	void __localCopy(const RValue& v)
+	{
+		COPY_RValue__Post(this, &v);
+	}
+
+	~RValue()
+	{
+		//std::cout << "DESTRUCTOR CALLED!" << std::endl;
+		__localFree();
+	}
 
 	RValue()
 	{
 		flags = 0;
-		kind = VALUE_UNSET;
+		kind = VALUE_UNDEFINED;
 		v64 = 0L;
+	}
+
+	RValue(const RValue& v)
+	{
+		__localCopy(v);
 	}
 
 	RValue(double v)
@@ -172,18 +226,18 @@ struct RValue
 		val = v;
 	}
 
-	RValue(bool v)
+	RValue(float v)
 	{
 		flags = 0;
-		kind = VALUE_BOOL;
-		val = v ? 1.0 : 0.0;
+		kind = VALUE_REAL;
+		val = v;
 	}
 
 	RValue(int v)
 	{
 		flags = 0;
-		kind = VALUE_INT32;
-		v32 = v;
+		kind = VALUE_REAL;
+		val = v;
 	}
 
 	RValue(long long v)
@@ -191,6 +245,13 @@ struct RValue
 		flags = 0;
 		kind = VALUE_INT64;
 		v64 = v;
+	}
+
+	RValue(bool v)
+	{
+		flags = 0;
+		kind = VALUE_REAL;
+		val = v ? 1.0 : 0.0;
 	}
 
 	RValue(std::nullptr_t)
@@ -210,15 +271,76 @@ struct RValue
 	RValue(const char* v)
 	{
 		flags = 0;
-		kind = VALUE_STRING;
-		pRefString = new RefString();
-		pRefString->m_thing = v;
-		pRefString->m_size = strlen(v) + 1;
-		pRefString->inc();
+		YYSetString(this, v);
+	}
+
+	RValue(std::string v)
+	{
+		flags = 0;
+		YYSetString(this, v.c_str());
+	}
+
+	RValue(std::wstring v)
+	{
+		flags = 0;
+		int __size = WideCharToMultiByte(CP_UTF8, 0, v.c_str(), -1, nullptr, 0, nullptr, nullptr);
+		LPSTR s = new CHAR[__size];
+
+		WideCharToMultiByte(CP_UTF8, 0, v.c_str(), -1, s, __size, nullptr, nullptr);
+
+		YYSetString(this, s);
+		delete[] s;
+	}
+
+	RValue operator-()
+	{
+		RValue ret;
+		ret.kind = kind;
+		ret.flags = flags;
+		switch ((kind & MASK_KIND_RVALUE)) {
+			case VALUE_BOOL:
+			case VALUE_REAL: ret.val = -val; break;
+			case VALUE_INT32: ret.v32 = -v32; break;
+			case VALUE_INT64: ret.v64 = -v64; break;
+			default: abort();
+		}
+
+		return ret;
+	}
+
+	RValue operator+()
+	{
+		RValue copy(*this);
+		return copy;
+	}
+
+	RValue& operator=(const RValue& v)
+	{
+		if (&v != this)
+		{
+			RValue temp;
+			memcpy(&temp, &v, sizeof(RValue));
+			bool fIsArray = (temp.kind & MASK_KIND_RVALUE) == VALUE_ARRAY;
+			if (fIsArray) ++(temp.pRefArray->refcount);
+			__localFree();
+			if (fIsArray) --(temp.pRefArray->refcount);
+			__localCopy(temp);
+		}
+
+		return *this;
 	}
 
 	RValue& operator=(double v)
 	{
+		__localFree();
+		kind = VALUE_REAL;
+		val = v;
+		return *this;
+	}
+
+	RValue& operator=(float v)
+	{
+		__localFree();
 		kind = VALUE_REAL;
 		val = v;
 		return *this;
@@ -226,13 +348,15 @@ struct RValue
 
 	RValue& operator=(int v)
 	{
-		kind = VALUE_INT32;
-		v32 = v;
+		__localFree();
+		kind = VALUE_REAL;
+		val = v;
 		return *this;
 	}
 
 	RValue& operator=(long long v)
 	{
+		__localFree();
 		kind = VALUE_INT64;
 		v64 = v;
 		return *this;
@@ -240,6 +364,7 @@ struct RValue
 
 	RValue& operator=(void* v)
 	{
+		__localFree();
 		kind = VALUE_PTR;
 		ptr = v;
 		return *this;
@@ -247,7 +372,8 @@ struct RValue
 
 	RValue& operator=(bool v)
 	{
-		kind = VALUE_BOOL;
+		__localFree();
+		kind = VALUE_REAL;
 		val = v ? 1.0 : 0.0;
 		return *this;
 	}
@@ -256,9 +382,10 @@ struct RValue
 	{
 		switch (kind & MASK_KIND_RVALUE)
 		{
-			case VALUE_REAL: val++;
-			case VALUE_INT32: v32++;
-			case VALUE_INT64: v64++;
+			case VALUE_BOOL:
+			case VALUE_REAL: ++val; break;
+			case VALUE_INT32: ++v32; break;
+			case VALUE_INT64: ++v64; break;
 			default: abort();
 		}
 		return *this;
@@ -275,11 +402,13 @@ struct RValue
 	{
 		switch (kind & MASK_KIND_RVALUE)
 		{
-			case VALUE_REAL: val--;
-			case VALUE_INT32: v32--;
-			case VALUE_INT64: v64--;
+			case VALUE_BOOL:
+			case VALUE_REAL: val--; break;
+			case VALUE_INT32: v32--; break;
+			case VALUE_INT64: v64--; break;
 			default: abort();
 		}
+		return *this;
 	}
 
 	RValue& operator--(int)
@@ -319,7 +448,47 @@ struct RValue
 		return (!(operator==(rhs)));
 	}
 
-	std::string asString()
+	const RValue& DoArrayIndex(const int _index) const
+	{
+		const RValue* pV = nullptr;
+		if ((kind & MASK_KIND_RVALUE) == VALUE_ARRAY && (pRefArray != nullptr)) {
+			ldiv_t ind = ldiv(_index, VARIABLE_ARRAY_MAX_DIMENSION);
+			if (pRefArray->pOwner == nullptr) abort();
+
+			const DynamicArrayOfRValue* pArr = nullptr;
+			if ((ind.quot >= 0) && (pRefArray != nullptr) && (ind.quot < pRefArray->length)) {
+				pArr = &pRefArray->pArray[ind.quot];
+				if ((ind.rem >= 0) && (ind.rem < pArr->length)) {
+					pV = &pArr->arr[ind.rem];
+				}
+				else {
+					abort();
+				}
+			}
+			else {
+				abort();
+			}
+		}
+		else {
+			pV = this;
+			abort();
+		}
+
+		return *pV;
+	}
+
+	const RValue& operator[](const int _index)
+	{
+		return DoArrayIndex(_index);
+	}
+
+	const RValue& operator[](const double _index)
+	{
+		int _iindex = static_cast<int>(_index);
+		return operator[](_iindex);
+	}
+
+	std::string asString() const
 	{
 		switch (kind & MASK_KIND_RVALUE)
 		{
@@ -332,6 +501,33 @@ struct RValue
 				std::snprintf(buf, sizeof(buf), "%p", ptr);
 				return std::string(buf);
 			}
+			case VALUE_ARRAY: {
+				// WARNING: A VERY VERY VERY HORRIBLE IMPLEMENTATION!!
+				typedef std::list<RValue> RValueList;
+				void CallRFunction(int id, RValue& ret, const RValueList& args);
+
+				if (this->pRefArray->pArray == nullptr)
+					return "{ <empty array pointer> }";
+				int arrlen = this->pRefArray->pArray->length;
+				if (arrlen <= 0) return "{ <empty array> }";
+
+				std::stringstream ss;
+
+				ss << "{ ";
+				for (int i = 0; i < arrlen; i++)
+				{
+					const RValue& elem = this->DoArrayIndex(i);
+					// "i":
+					ss << '"' << i << "\": ";
+					if ((elem.kind & MASK_KIND_RVALUE) == VALUE_STRING) ss << '"';
+					ss << elem.asString();
+					if ((elem.kind & MASK_KIND_RVALUE) == VALUE_STRING) ss << '"';
+					if (i < arrlen - 1) ss << ", ";
+				}
+				ss << " }";
+
+				return ss.str();
+			}
 			case VALUE_BOOL: return (val > 0.5) ? "true" : "false";
 			case VALUE_UNSET: return "<unset>"; // ??????????
 			case VALUE_UNDEFINED: return "<undefined>";
@@ -340,7 +536,7 @@ struct RValue
 		}
 	}
 
-	double asReal()
+	double asReal() const
 	{
 		switch (kind & MASK_KIND_RVALUE)
 		{
@@ -363,23 +559,55 @@ struct RValue
 		}
 	}
 
+	bool isNumber() const
+	{
+		int mKind = kind & MASK_KIND_RVALUE;
+		return (mKind == VALUE_REAL || mKind == VALUE_INT32 || mKind == VALUE_INT64 || mKind == VALUE_BOOL);
+	}
 };
 
-#define FREE_RValue(rvp) \
-	do                                                           \
-	{                                                            \
-		RValue *__p = ((rvp));                                   \
-		if ( ( (__p->kind - 1) & (MASK_KIND_RVALUE & ~3) ) == 0) \
-		{                                                        \
-			FREE_RValue__Pre(__p);                               \
-		}                                                        \
-		__p->flags = 0;                                          \
-		__p->kind = VALUE_UNDEFINED;                             \
-		__p->ptr = nullptr;                                      \
-	}                                                            \
-	while (false);                                                   
+void COPY_RValue__Post(RValue* _pDest, const RValue* _pSource)
+{
+	_pDest->kind = _pSource->kind;
+	_pDest->flags = _pSource->flags;
 
+	switch (_pSource->kind & MASK_KIND_RVALUE) {
+	case VALUE_BOOL:
+	case VALUE_REAL:
+		_pDest->val = _pSource->val;
+		break;
+	case VALUE_INT32:
+		_pDest->v32 = _pSource->v32;
+		break;
+	case VALUE_INT64:
+		_pDest->v64 = _pSource->v64;
+		break;
+	case VALUE_PTR:
+	case VALUE_ITERATOR:
+		_pDest->ptr = _pSource->ptr;
+		break;
+	case VALUE_ARRAY:
+		_pDest->pRefArray = _pSource->pRefArray;
+		if (_pDest->pRefArray != nullptr) {
+			++_pDest->pRefArray->refcount;
+			if (_pDest->pRefArray->pOwner == nullptr) {
+				_pDest->pRefArray->pOwner = const_cast<RValue*>(_pSource);
+			}
+		}
+		break;
+	case VALUE_STRING:
+		_pDest->pRefString = RefString::assign(_pSource->pRefString);
+		break;
+	case VALUE_OBJECT:
+		_pDest->pObj = _pSource->pObj;
 
+		if (_pDest->pObj != nullptr) {
+			// TODO!!
+			abort();
+		}
+		break;
+	}
+}
 
 enum eDeleteType : int {
 	eDelete_placementdelete = 3,
@@ -398,6 +626,20 @@ template<class T>
 class cARRAY_STRUCTURE {
 	int Length;
 	T * Array;
+};
+
+class cARRAY_OF_POINTERS {
+	int Length;
+	int m_slotsUsed;
+	int m_reserveSize;
+	void** Array;
+
+	~cARRAY_OF_POINTERS() {
+		if (this->Length != 0) {
+			this->Array = nullptr;
+			delete this;
+		}
+	}
 };
 
 template<class T>
@@ -627,10 +869,10 @@ public:
 };
 
 struct YYRECT {
-	int left;
-	int top;
-	int right;
-	int bottom;
+	int bbox_left;
+	int bbox_top;
+	int bbox_right;
+	int bbox_bottom;
 };
 
 struct SLink;
@@ -649,19 +891,19 @@ struct SLink {
 
 class cInstancePathAndTimeline {
 public:
-	int i_pathindex;
-	float i_pathposition;
-	float i_pathpositionprevious;
-	float i_pathspeed;
-	float i_pathscale;
-	float i_pathorientation;
-	int i_pathend;
-	float i_pathxstart;
-	float i_pathystart;
-	int i_timelineindex;
-	float i_timelineprevposition;
-	float i_timelineposition;
-	float i_timelinespeed;
+	int i_path_index;
+	float i_path_position;
+	float i_path_positionprevious;
+	float i_path_speed;
+	float i_path_scale;
+	float i_path_orientation;
+	int i_path_end;
+	float i_path_xstart;
+	float i_path_ystart;
+	int i_timeline_index;
+	float i_timeline_prevposition;
+	float i_timeline_position;
+	float i_timeline_speed;
 };
 
 struct CPhysicsDataGM {
@@ -785,15 +1027,15 @@ public:
 	struct CSkeletonInstance * m_pSkeletonAnimation;
 	unsigned int m_Instflags;
 	int i_id;
-	int i_objectindex;
-	int i_spriteindex;
-	float i_imageindex;
-	float i_imagespeed;
-	float i_imagescalex;
-	float i_imagescaley;
-	float i_imageangle;
-	float i_imagealpha;
-	unsigned int i_imageblend;
+	int i_object_index;
+	int i_sprite_index;
+	float i_image_index;
+	float i_image_speed;
+	float i_image_scalex;
+	float i_image_scaley;
+	float i_image_angle;
+	float i_image_alpha;
+	unsigned int i_image_blend;
 	float i_x;
 	float i_y;
 	float i_xstart;
@@ -803,19 +1045,19 @@ public:
 	float i_direction;
 	float i_speed;
 	float i_friction;
-	float i_gravitydir;
+	float i_gravity_direction;
 	float i_gravity;
 	float i_hspeed;
 	float i_vspeed;
 	YYRECT i_bbox;
 	int i_timer[12];
-	cInstancePathAndTimeline * m_pPathAndTimeline;
-	CCode * i_initcode;
-	CCode * i_precreatecode;
+	cInstancePathAndTimeline* m_pPathAndTimeline;
+	CCode* i_initcode;
+	CCode* i_precreatecode;
 	CObjectGM * m_pOldObject;
-	int m_nLayerID;
-	int i_maskindex;
-	short m_nMouseOver;
+	int i_layer;
+	int i_mask_index;
+	short i_nMouseOver;
 	CInstance * m_pNext;
 	CInstance * m_pPrev;
 	SLink m_collisionLink;
@@ -824,7 +1066,7 @@ public:
 	float i_depth;
 	float i_currentdepth;
 	float i_lastImageNumber;
-	unsigned int m_collisionTestNumber;
+	unsigned int i_collisionTestNumber;
 };
 
 struct YYRoom {
@@ -909,7 +1151,7 @@ extern int* g_ObjectNumEvent;
 extern int* g_CurrentRoom;
 
 typedef void(*GML_ObjectEvent)(CInstance* _pSelf, CInstance* _pOther);
-typedef RValue&(*GML_Script)(CInstance* _pSelf, CInstance* _pOther, RValue& _result, int _count, RValue** _args);
+typedef RValue&(*GML_Script)(CInstance* _pSelf, CInstance* _pOther, RValue& _result, int _count, const RValue** _args);
 typedef void(*TRoutine)(RValue& _result, CInstance* _pSelf, CInstance* _pOther, int _argc, RValue *_args);
 
 
@@ -924,7 +1166,8 @@ struct RFunction {
 extern int* g_RFunctionTableLen;
 extern RFunction** g_RFunctionTable;
 
-void CallRFunction(int id, RValue& ret, const std::list<RValue>& args)
+typedef std::list<RValue> RValueList;
+void CallRFunction(int id, RValue& ret, const RValueList& args)
 {
 	if (id < 0) abort();
 
@@ -932,17 +1175,17 @@ void CallRFunction(int id, RValue& ret, const std::list<RValue>& args)
 	int i = 0;
 	int argc = args.size();
 
-	// allocate arguments **on the stack! right here!!!**
-	RValue* ptr = reinterpret_cast<RValue*>(alloca(argc * sizeof(RValue)));
-	// we want to *copy* the arguments, not pass-by-ref.
-	for (RValue rv : args) {
-		ptr[i] = rv; i++;
+	// allocate arguments **on the stack!** because GameMaker is stupid.
+	RValue Rargs[16]{ 0.0 };
+	for (const auto& rv : args) {
+		if (i >= sizeof(Rargs)) abort();
+		Rargs[i] = rv; i++;
 	}
 
-	RFunc.f_routine(ret, g_Self, nullptr, argc, ptr);
+	RFunc.f_routine(ret, g_Self, nullptr, argc, Rargs);
 }
 
-void CallGMLFunction(int id, RValue& ret, const std::list<RValue>& args)
+void CallGMLFunction(int id, RValue& ret, const RValueList& args)
 {
 	if (id < 0) abort();
 
@@ -950,7 +1193,7 @@ void CallGMLFunction(int id, RValue& ret, const std::list<RValue>& args)
 	CallRFunction(g_BuiltinFuncs[id]->val, ret, args);
 }
 
-void CallScriptFunction(int id, RValue& ret, const std::list<RValue>& args, bool isEvent = false)
+void CallScriptFunction(int id, RValue& ret, const RValueList& args, bool isEvent = false)
 {
 	if (id < 0) abort();
 
@@ -964,12 +1207,12 @@ void CallScriptFunction(int id, RValue& ret, const std::list<RValue>& args, bool
 	else
 	{
 		// prepare argument memory.
-		RValue **Arguments = nullptr;
+		const RValue **Arguments = nullptr;
 		if (args.size() > 0)
 		{
-			Arguments = new RValue*[args.size()];
+			Arguments = const_cast<const RValue**>(new RValue*[args.size()]);
 			int i = 0;
-			for (const RValue& arg : args) { Arguments[i] = const_cast<RValue*>(&arg); i++; }
+			for (const auto& arg : args) { Arguments[i] = &arg; i++; }
 		}
 
 		// call

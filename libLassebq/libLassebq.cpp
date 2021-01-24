@@ -6,8 +6,12 @@
 #include "KatanaZeroIDs.h"
 #include <WinCon.h>
 #include <fstream>
+#include <shellapi.h>
 
 #define PROMPT "> "
+#define PRINT_VAR(cl,n) oS << #n << " = " << cl->i_##n << std::endl
+#define R(RV) (std::make_unique<RValue>((RV)))
+
 
 HMODULE exeBase = nullptr;
 YYVAR** g_BuiltinFuncs;
@@ -25,6 +29,8 @@ int g_BuiltinFuncSize;
 int g_GMLScriptsSize;
 int g_VariablesSize;
 int* g_CurrentRoom;
+FREE_RVal_Pre FREE_RValue__Pre;
+YYSetStr YYSetString;
 HWND g_YYGMWindowHWND;
 
 // RegisterCallback stuff
@@ -34,6 +40,14 @@ GML_ds_map_add_string ds_map_add_string = nullptr;
 GML_create_async_event create_async_event = nullptr;
 
 RValue Result(0.0);
+
+void lassebq_free_result() {
+	Result.~RValue();
+	memset(&Result, 0, sizeof(RValue));
+	Result.kind = VALUE_UNSET;
+	Result.v64 = 0L;
+	Result.flags = 0;
+}
 
 void clearConsole()
 {
@@ -145,21 +159,25 @@ int lassebq_get_current_room()
 
 void lassebq_dbg()
 {
+	std::cout << "Waiting for Visual Studio's debugger..." << std::endl;
 	while (IsDebuggerPresent() == FALSE) Sleep(100);
 }
 
-void lassebq_callb(int id, const std::list<RValue>& args = { })
+void lassebq_callb(int id, const RValueList& args = { })
 {
+	lassebq_free_result();
 	CallGMLFunction(id, Result, args);
 }
 
-void lassebq_callr(int id, const std::list<RValue>& args = { })
+void lassebq_callr(int id, const RValueList& args = { })
 {
+	lassebq_free_result();
 	CallRFunction(id, Result, args);
 }
 
-void lassebq_calls(int id, const std::list<RValue>& args = { }, bool isObjectEvent = false)
+void lassebq_calls(int id, bool isObjectEvent, const RValueList& args = { })
 {
+	lassebq_free_result();
 	CallScriptFunction(id, Result, args, isObjectEvent);
 }
 
@@ -169,9 +187,10 @@ void lassebq_Step_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 	MessageBox(g_YYGMWindowHWND, TEXT("This is the text."), TEXT("Caption."), MB_OK | MB_ICONINFORMATION);
 
 	int keyboard_check_pressed = lassebq_find_builtin("keyboard_check_pressed");
+	RValue key(VK_F2);
 
 	// fun fact: vk_* constants in GM match up with Windows's WinAPI VK_* constants 99.99% of the time :)
-	lassebq_callb(keyboard_check_pressed, { VK_F2 });
+	lassebq_callb(keyboard_check_pressed, { key });
 
 	std::cout << "yes!!!" << std::endl;
 
@@ -205,12 +224,13 @@ void lassebq_DrawGUI_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 	RValue text_y(128.0);
 	RValue text_string("If Grossley's so good, why there's no Grossley 2????");
 	RValue text_color(16777215.0); // c_white
+	RValue text_font(EtoD(GameFonts::font_folderbold));
 
 								   // don forget
 	g_Self = _pSelf;
 
 	// set draw settings.
-	lassebq_callr(draw_set_font, { EtoD(GameFonts::font_folderbold) });
+	lassebq_callr(draw_set_font, { text_font });
 	lassebq_callr(draw_set_color, { text_color });
 
 	// lel.
@@ -229,6 +249,8 @@ void allocConsoleQuick()
 		_wfreopen_s(&__fDummy, L"CONIN$", L"r", stdin);
 		_wfreopen_s(&__fDummy, L"CONOUT$", L"w", stderr);
 		_wfreopen_s(&__fDummy, L"CONOUT$", L"w", stdout);
+		//SetConsoleCP(CP_UTF8);
+		SetConsoleOutputCP(CP_UTF8);
 		SetConsoleTitle(TEXT("a cat in need is a cat indeed."));
 	}
 }
@@ -403,7 +425,7 @@ void lassebq_initYYC()
 	g_GMLScripts = reinterpret_cast<YYGMLFunc*>(exeAsUint + GMLScript_Addr);
 	for (int i = 0; true; i++)
 	{
-		if (g_GMLScripts[i].pName == nullptr)
+		if (g_GMLScripts[i].pName == nullptr || g_GMLScripts[i].ptr == nullptr)
 		{
 			g_GMLScriptsSize = i;
 			break;
@@ -417,10 +439,188 @@ void lassebq_initYYC()
 	g_ObjectHashTable = reinterpret_cast<CHash<CObjectGM>**>(exeAsUint + Object_Hash_Addr);
 	g_ObjectHasEvent = reinterpret_cast<DynamicArrayOfInteger*>(exeAsUint + Object_Has_Event_Addr);
 	g_ObjectNumEvent = reinterpret_cast<int*>(exeAsUint + Object_Num_Event_Addr);
+	FREE_RValue__Pre = reinterpret_cast<FREE_RVal_Pre>(exeAsUint + FREE_RValue__Pre_Addr);
+	YYSetString = reinterpret_cast<YYSetStr>(exeAsUint + YYSetString_Addr);
 	g_Self = nullptr;
 
 	lassebq_callr(lassebq_find_runtime("window_handle"));
 	g_YYGMWindowHWND = reinterpret_cast<HWND>(Result.ptr);
+}
+
+void lassebq_print_global_rvars(std::ostream& oS)
+{
+	RValue arr(0.0);
+	int variable_instance_get_names = lassebq_find_runtime("variable_instance_get_names");
+	int variable_global_get = lassebq_find_runtime("variable_global_get");
+	CallRFunction(variable_instance_get_names, arr, { -5.0 });
+
+	oS << "-------------------------------" << std::endl;
+	if (arr.pRefArray->pArray == nullptr)
+	{
+		oS << "No RValues!" << std::endl;
+	}
+	else
+	{
+		int arrlen = arr.pRefArray->pArray->length;
+
+		for (int i = 0; i < arrlen; i++)
+		{
+			const std::string varName = arr[i].asString();
+			oS << varName << " = ";
+			lassebq_callr(variable_global_get, { varName });
+			oS << Result.asString() << std::endl;
+		}
+	}
+	oS << "-------------------------------" << std::endl;
+}
+
+void lassebq_print_instance_rvars(int instid, std::ostream& oS)
+{
+	CRoom* curRoom = *g_RunRoom;
+	CInstance* inst = curRoom->m_Active.m_pFirst;
+	while (inst != nullptr)
+	{
+		if (inst->i_id == instid) break;
+		inst = inst->m_pNext;
+	}
+
+	if (inst == nullptr)
+	{
+		std::cout << "INSTANCE DOES NOT EXIST!" << std::endl;
+		return;
+	}
+
+	oS << "-------------------------------" << std::endl;
+	// very slow :/
+	RValue arr(0.0);
+	int variable_instance_get_names = lassebq_find_runtime("variable_instance_get_names");
+	int variable_instance_get = lassebq_find_runtime("variable_instance_get");
+	CallRFunction(variable_instance_get_names, arr, { instid });
+
+	if (arr.pRefArray->pArray == nullptr)
+	{
+		std::cout << "No RValues!" << std::endl;
+	}
+	else
+	{
+		int arrlen = arr.pRefArray->pArray->length;
+
+		for (int i = 0; i < arrlen; i++)
+		{
+			const std::string varName = arr[i].asString();
+			oS << varName << " = ";
+			lassebq_callr(variable_instance_get, { instid, varName });
+			oS << Result.asString() << std::endl;
+		}
+	}
+
+	oS << "-------------------------------" << std::endl;
+}
+
+void lassebq_print_instance_vars(int instid, std::ostream& oS)
+{
+	CRoom* curRoom = *g_RunRoom;
+	CInstance* inst = curRoom->m_Active.m_pFirst;
+	while (inst != nullptr)
+	{
+		if (inst->i_id == instid) break;
+		inst = inst->m_pNext;
+	}
+
+	if (inst == nullptr)
+	{
+		std::cout << "INSTANCE DOES NOT EXIST!" << std::endl;
+		return;
+	}
+
+	oS << "-------------------------------" << std::endl;
+	PRINT_VAR(inst, id);
+	PRINT_VAR(inst, object_index);
+	PRINT_VAR(inst, sprite_index);
+	PRINT_VAR(inst, image_index);
+	PRINT_VAR(inst, image_speed);
+	PRINT_VAR(inst, image_scalex);
+	PRINT_VAR(inst, image_scaley);
+	PRINT_VAR(inst, image_angle);
+	PRINT_VAR(inst, image_alpha);
+	PRINT_VAR(inst, image_blend);
+	PRINT_VAR(inst, x);
+	PRINT_VAR(inst, y);
+	PRINT_VAR(inst, xstart);
+	PRINT_VAR(inst, ystart);
+	PRINT_VAR(inst, xprevious);
+	PRINT_VAR(inst, yprevious);
+	PRINT_VAR(inst, direction);
+	PRINT_VAR(inst, speed);
+	PRINT_VAR(inst, friction);
+	PRINT_VAR(inst, gravity_direction);
+	PRINT_VAR(inst, gravity);
+	PRINT_VAR(inst, hspeed);
+	PRINT_VAR(inst, vspeed);
+	oS << "bbox_left = " << inst->i_bbox.bbox_left << std::endl;
+	oS << "bbox_top = " << inst->i_bbox.bbox_top << std::endl;
+	oS << "bbox_right = " << inst->i_bbox.bbox_right << std::endl;
+	oS << "bbox_bottom = " << inst->i_bbox.bbox_bottom << std::endl;
+
+	for (int i = 0; i < sizeof(inst->i_timer) / sizeof(*inst->i_timer); i++)
+	{
+		oS << "alarm[" << i << "] = " << inst->i_timer[i] << std::endl;
+	}
+
+	if (inst->m_pPathAndTimeline != nullptr)
+	{
+		PRINT_VAR(inst->m_pPathAndTimeline, path_index);
+		PRINT_VAR(inst->m_pPathAndTimeline, path_position);
+		PRINT_VAR(inst->m_pPathAndTimeline, path_positionprevious);
+		PRINT_VAR(inst->m_pPathAndTimeline, path_speed);
+		PRINT_VAR(inst->m_pPathAndTimeline, path_scale);
+		PRINT_VAR(inst->m_pPathAndTimeline, path_orientation);
+		PRINT_VAR(inst->m_pPathAndTimeline, path_end);
+		PRINT_VAR(inst->m_pPathAndTimeline, path_xstart);
+		PRINT_VAR(inst->m_pPathAndTimeline, path_ystart);
+		PRINT_VAR(inst->m_pPathAndTimeline, timeline_index);
+		PRINT_VAR(inst->m_pPathAndTimeline, timeline_prevposition);
+		PRINT_VAR(inst->m_pPathAndTimeline, timeline_position);
+		PRINT_VAR(inst->m_pPathAndTimeline, timeline_speed);
+	}
+	else
+	{
+		oS << "[ path_* and timeline_* variables are unset!!! ]" << std::endl;
+	}
+
+	PRINT_VAR(inst, layer);
+	PRINT_VAR(inst, mask_index);
+	PRINT_VAR(inst, nMouseOver);
+	PRINT_VAR(inst, depth);
+	PRINT_VAR(inst, currentdepth);
+	PRINT_VAR(inst, lastImageNumber);
+	PRINT_VAR(inst, collisionTestNumber);
+	oS << "-------------------------------" << std::endl;
+}
+
+void lassebq_print_instances(std::ostream& oS)
+{
+	CRoom* curRoom = *g_RunRoom;
+	CInstance* inst = curRoom->m_Active.m_pFirst;
+	oS << "-------------------------------" << std::endl;
+	while (inst != nullptr)
+	{
+		oS << inst->i_id << " " << inst->m_pObject->m_pName << std::endl;
+		inst = inst->m_pNext;
+	}
+	oS << "-------------------------------" << std::endl;
+}
+
+void lassebq_wrong_args()
+{
+	std::cout << "Invalid arguments." << std::endl;
+}
+
+LPSTR lassebq_WtoM(const std::wstring& wstr) {
+	int size = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, nullptr, 0, nullptr, nullptr);
+	LPSTR str = new CHAR[size];
+	WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, str, size, nullptr, nullptr);
+	return str;
 }
 
 DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
@@ -432,65 +632,255 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 	std::cout << "Scripts: " << g_GMLScriptsSize << std::endl;
 	std::cout << "Window handle: " << g_YYGMWindowHWND << std::endl;
 	std::cout << std::endl;
+	std::cout << "CreateDsMap: " << ds_map_create << std::endl;
+	std::cout << "DsMapAddDouble: " << ds_map_add_real << std::endl;
+	std::cout << "DsMapAddString: " << ds_map_add_string << std::endl;
+	std::cout << "CreateAsyncEvent: " << create_async_event << std::endl;
+	std::cout << std::endl;
 	std::cout << "Init done, type funny commands, get funny responses (or Access Violations)..." << std::endl;
 
 	std::string cmd;
+	std::wstring fname(L"out.log");
+	bool useStdcout;
 
 	for (;;)
 	{
 		std::cout << PROMPT;
 		std::getline(std::cin, cmd);
+		if (cmd.length() == 0 || cmd.at(0) == ' ') continue;
 
-		if (cmd == "test")
+		// convert UTF_8 string to wide.
+		int bufSize = MultiByteToWideChar(GetConsoleCP(), MB_PRECOMPOSED, cmd.c_str(), -1, nullptr, 0);
+		LPWSTR buf = new WCHAR[bufSize];
+		MultiByteToWideChar(GetConsoleCP(), MB_PRECOMPOSED, cmd.c_str(), -1, buf, bufSize);
+
+		// parse the arguments and convert them into a vector of arguments.
+		int cmd_argc = 0;
+		LPWSTR* winapi_argv = CommandLineToArgvW(buf, &cmd_argc);
+		std::vector<std::wstring> cmd_argv;
+		for (int i = 0; i < cmd_argc; i++)
 		{
-			int audio_stop_all = lassebq_find_builtin("audio_stop_all");
-			int audio_play_sound = lassebq_find_builtin("audio_play_sound");
-			lassebq_callb(audio_stop_all);
-			lassebq_callb(audio_play_sound, { EtoD(GameSounds::song_youwillneverknow), 1, true });
-			std::cout << "return: " << Result.asString() << std::endl;
+			cmd_argv.push_back(winapi_argv[i]);
 		}
-		else if (cmd == "gmltest")
-		{
-			const char* fname = "gml_Script_inside_camera";
-			int func = lassebq_find_script(fname);
-			std::cout << fname << ": " << func << std::endl;
 
-			if (func == -1)
+		// free the winapi stuff.
+		LocalFree(winapi_argv);
+		winapi_argv = nullptr;
+		delete[] buf;
+		buf = nullptr;
+		bufSize = 0;
+
+		// finally.
+		if (cmd_argv[0] == L"list-instances")
+		{
+			if (useStdcout)
+				lassebq_print_instances(std::cout);
+			else
 			{
-				std::cout << "LOOKUP FAILED!" << std::endl;
+				std::ofstream fS(fname, std::ofstream::out | std::ofstream::app);
+				lassebq_print_instances(fS);
+				fS.close();
+			}
+		}
+		else if (cmd_argv[0] == L"set-cout-mode")
+		{
+			if (cmd_argv.size() <= 1)
+			{
+				useStdcout = true;
+				std::cout << "Output mode: console" << std::endl;
 			}
 			else
 			{
-				// meh, try a single 1 as the argument :/
-				lassebq_calls(func, { 1.0 }, false);
-				std::cout << "Return: " << Result.asString() << std::endl;
+				useStdcout = false;
+				fname = cmd_argv[1];
+				std::cout << "Output mode: file" << std::endl;
 			}
 		}
-		else if (cmd == "patch")
+		else if (cmd_argv[0] == L"list-global-vars")
 		{
-			lassebq_patchObject();
-		}
-		else if (cmd == "dumpgml")
-		{
-			std::ofstream dfs("dump.txt", std::ofstream::out | std::ofstream::trunc);
-			dfs << "_____________________________" << std::endl;
-			dfs << "ADDRESS | YYC CODE ENTRY NAME" << std::endl;
-			dfs << "________|____________________" << std::endl;
-			for (int i = 0; true; i++)
+			if (useStdcout)
+				lassebq_print_global_rvars(std::cout);
+			else
 			{
-				YYGMLFunc f = g_GMLScripts[i];
-				if (f.pName == nullptr || f.ptr == nullptr) break;
-				std::string start = std::string(f.pName).substr(0, 4);
-				if (start == "gml_" || start == "Time") // gml OR timeline.
-				{
-					dfs << reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(f.ptr) - reinterpret_cast<uintptr_t>(exeBase)) << "|" << f.pName << std::endl;
-				}
-				else break;
+				std::ofstream fS(fname, std::ofstream::out | std::ofstream::app);
+				lassebq_print_global_rvars(fS);
+				fS.close();
+			}
+		}
+		else if (cmd_argv[0] == L"list-instance-vars")
+		{
+			if (cmd_argv.size() < 2)
+			{
+				lassebq_wrong_args();
+				continue;
 			}
 
-			dfs.close();
+			try {
+				int instid = std::stoi(cmd_argv[1]);
+				if (useStdcout)
+					lassebq_print_instance_vars(instid, std::cout);
+				else
+				{
+					std::ofstream fS(fname, std::ofstream::out | std::ofstream::app);
+					lassebq_print_instance_vars(instid, fS);
+					fS.close();
+				}
+			}
+			catch (std::exception&) {
+				lassebq_wrong_args();
+			}
 		}
-		else if (cmd == "cls")
+		else if (cmd_argv[0] == L"list-instance-rvars")
+		{
+			if (cmd_argv.size() < 2)
+			{
+				lassebq_wrong_args();
+				continue;
+			}
+
+			try {
+				int instid = std::stoi(cmd_argv[1]);
+				// VERY SLOW!
+				if (useStdcout)
+					lassebq_print_instance_rvars(instid, std::cout);
+				else
+				{
+					std::ofstream fS(fname, std::ofstream::out | std::ofstream::app);
+					lassebq_print_instance_rvars(instid, fS);
+					fS.close();
+				}
+			}
+			catch (std::exception&) {
+				lassebq_wrong_args();
+			}
+		}
+		else if (cmd_argv[0] == L"calls")
+		{
+			if (cmd_argv.size() < 2)
+			{
+				lassebq_wrong_args();
+				continue;
+			}
+
+			try {
+				LPSTR fName = lassebq_WtoM(cmd_argv[1]);
+				int func = lassebq_find_script(fName);
+
+				// prepare arguments.
+				RValueList args;
+
+				for (size_t i = 2; i < cmd_argv.size(); i++) {
+					if (cmd_argv[i].at(0) == L'@') {
+						std::wstring noAt = cmd_argv[i].substr(1);
+						double vv = std::stod(noAt);
+						args.push_back(vv);
+					}
+					else {
+						args.push_back(cmd_argv[i]);
+					}
+				}
+				
+				// do the call
+				lassebq_calls(func, false, args);
+
+				std::cout << "Return value: " << Result.asString() << std::endl;
+			}
+			catch (std::exception&) {
+				lassebq_wrong_args();
+			}
+		}
+		else if (cmd_argv[0] == L"callr")
+		{
+			if (cmd_argv.size() < 2)
+			{
+				lassebq_wrong_args();
+				continue;
+			}
+
+			try {
+				LPSTR fName = lassebq_WtoM(cmd_argv[1]);
+				int func = lassebq_find_runtime(fName);
+
+				// prepare arguments.
+				RValueList args;
+
+				for (size_t i = 2; i < cmd_argv.size(); i++) {
+					if (cmd_argv[i].at(0) == L'@') {
+						std::wstring noAt = cmd_argv[i].substr(1);
+						double vv = std::stod(noAt);
+						args.push_back(vv);
+					}
+					else {
+						args.push_back(cmd_argv[i]);
+					}
+				}
+
+				// do the call
+				lassebq_callr(func, args);
+
+				std::cout << "Return value: " << Result.asString() << std::endl;
+			}
+			catch (std::exception&) {
+				lassebq_wrong_args();
+			}
+		}
+		else if (cmd_argv[0] == L"callo")
+		{
+			if (cmd_argv.size() < 2)
+			{
+				lassebq_wrong_args();
+				continue;
+			}
+
+			try {
+				LPSTR fName = lassebq_WtoM(cmd_argv[1]);
+				int func = lassebq_find_script(fName);
+				delete[] fName;
+				fName = nullptr;
+
+				// do the call
+				lassebq_calls(func, true);
+
+				std::cout << "Called!" << std::endl;
+			}
+			catch (std::exception&) {
+				lassebq_wrong_args();
+			}
+		}
+		else if (cmd_argv[0] == L"set-var")
+		{
+			if (cmd_argv.size() < 4)
+			{
+				lassebq_wrong_args();
+				continue;
+			}
+
+			try {
+				int instid = std::stoi(cmd_argv[1]);
+				std::string varname = lassebq_WtoM(cmd_argv[2]);
+				RValueList args;
+
+				if (cmd_argv[3].at(0) == L'@')
+				{
+					std::wstring noAt = cmd_argv[3].substr(1);
+					double vv = std::stod(noAt);
+					args.emplace_back(new RValue(vv));
+				}
+				else
+				{
+					args.emplace_back(new RValue(cmd_argv[3]));
+				}
+
+				int variable_instance_set = lassebq_find_runtime("variable_instance_set");
+				lassebq_callr(variable_instance_set, args);
+
+				std::cout << "Set!" << std::endl;
+			}
+			catch (std::exception&) {
+				lassebq_wrong_args();
+			}
+		}
+		else if (cmd_argv[0] == L"cls")
 		{
 			clearConsole();
 		}

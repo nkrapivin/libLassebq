@@ -11,6 +11,8 @@
 #define Builtin_Addr          (0x01A3C290u)
 #define RFunctionTable_Addr   (0x01CFCB54u)
 #define RFunctionTableL_Addr  (0x01CFCB58u)
+#define FREE_RValue__Pre_Addr (0x00001070u)
+#define YYSetString_Addr      (0x014DB840u)
 #define Variable_Addr         (0x01A37CF8u)
 #define GMLScript_Addr        (0x01A3C6F4u)
 #define Run_Room_Addr         (0x01CF88D8u)
