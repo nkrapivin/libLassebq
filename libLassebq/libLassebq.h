@@ -36,10 +36,35 @@ enum class GML_async_event : int {
 	AsyncSystem = 75
 };
 
-typedef void(*GML_create_async_event)(int dsmapindex, int event_index);
-typedef int(*GML_ds_map_create)(int _num, ...);
-typedef bool(*GML_ds_map_add_string)(int _map, const char *_pKey, const char *_pValue);
-typedef bool(*GML_ds_map_add_real)(int _map, const char *_pKey, double _value);
+typedef int DSMap;
+typedef void(*GML_create_async_event)(DSMap dsmapindex, GML_async_event event_index);
+typedef DSMap(*GML_ds_map_create)(int _num, ...);
+typedef bool(*GML_ds_map_add_string)(DSMap _map, const char *_pKey, const char *_pValue);
+typedef bool(*GML_ds_map_add_real)(DSMap _map, const char *_pKey, double _value);
+
+struct SYYStackTrace
+{
+	SYYStackTrace* pNext;
+	const char* pName;
+	int line;
+	static SYYStackTrace** s_pStart;
+	SYYStackTrace(const char* _pName, int _line)
+	{
+		pName = _pName;
+		line = _line;
+		pNext = *s_pStart;
+		*s_pStart = this;
+	} // end constructor
+
+	~SYYStackTrace() {
+		*s_pStart = pNext;
+	} // end destructor
+};
+
+int a = sizeof(SYYStackTrace);
+
+#define YY_STACKTRACE_FUNC_ENTRY(_name, _line) SYYStackTrace __stackFunc(((_name)), ((_line)))
+#define YY_STACKTRACE_LINE(_line) __stackFunc.line = ((_line))
 
 #define MASK_KIND_RVALUE (0x0ffffff)
 enum RValueType : int {
@@ -89,11 +114,13 @@ struct matrix44
 	vec4	m[4];
 };
 
-const int ERV_None = 0;
-const int ERV_Enumerable = (1 << 0);
-const int ERV_Configurable = (1 << 1);
-const int ERV_Writable = (1 << 2);
-const int ERV_Owned = (1 << 3);
+enum ERV_KIND {
+	ERV_None = 0,
+	ERV_Enumerable = (1 << 0),
+	ERV_Configurable = (1 << 1),
+	ERV_Writable = (1 << 2),
+	ERV_Owned = (1 << 3)
+};
 
 #define JS_BUILTIN_PROPERTY_DEFAULT        (ERV_Writable | ERV_Configurable)
 #define JS_BUILTIN_LENGTH_PROPERTY_DEFAULT (ERV_None)
@@ -157,7 +184,6 @@ struct YYGMLFunc
 
 #pragma pack( push, 4)
 class YYObjectBase;
-int lassebq_find_runtime(const char* name);
 
 #define VARIABLE_ARRAY_MAX_DIMENSION (32000)
 #define ARRAY_INDEX_NO_INDEX         (INT_MIN)
@@ -166,8 +192,12 @@ int lassebq_find_runtime(const char* name);
 
 typedef void(*FREE_RVal_Pre)(RValue* p);
 typedef void(*YYSetStr)(RValue* _pVal, const char* _pS);
+typedef void(*YYCreStr)(RValue* _pVal, const char* _pS);
+typedef void(*GMMMSetLength)(void **buf, size_t new_length, char* _pFile, int _line);
 extern FREE_RVal_Pre FREE_RValue__Pre;
 extern YYSetStr YYSetString;
+extern YYCreStr YYCreateString;
+extern GMMMSetLength MMSetLength;
 
 // copies one RValue into another keeping stuff like references and GC in mind.
 void COPY_RValue__Post(RValue* _pDest, const RValue* _pSource);
@@ -187,11 +217,11 @@ struct RValue
 		};
 	};
 	int flags = 0; // use for flags (Hijack for Enumerable and Configurable bits in JavaScript)  (Note: probably will need a visibility as well, to support private variables that are promoted to object scope, but should not be seen (is that just not enumerated????) )
-	int kind = 0; // kind of value
+	int kind = VALUE_UNDEFINED; // kind of value
 
 	void __localFree(void)
 	{
-		if (((kind - 1) & (MASK_KIND_RVALUE & (~3))) == 0) {
+		if (((kind - 1) & (MASK_KIND_RVALUE & (~VALUE_PTR))) == 0) {
 			FREE_RValue__Pre(this);
 		}
 	}
@@ -310,6 +340,7 @@ struct RValue
 
 	RValue operator+()
 	{
+		// does nothing :/ just makes a copy of the value.
 		RValue copy(*this);
 		return copy;
 	}
@@ -378,6 +409,47 @@ struct RValue
 		return *this;
 	}
 
+	RValue& operator=(const char* v)
+	{
+		__localFree();
+		YYCreateString(this, v);
+		return *this;
+	}
+
+	RValue& operator=(std::string v)
+	{
+		return operator=(v.c_str());
+	}
+
+	RValue& operator=(std::wstring v)
+	{
+		flags = 0;
+		int __size = WideCharToMultiByte(CP_UTF8, 0, v.c_str(), -1, nullptr, 0, nullptr, nullptr);
+		LPSTR s = new CHAR[__size];
+
+		WideCharToMultiByte(CP_UTF8, 0, v.c_str(), -1, s, __size, nullptr, nullptr);
+		RValue& ret(operator=(s));
+		delete[] s;
+		return ret;
+	}
+
+	RValue operator!()
+	{
+		RValue ret;
+		ret.kind = kind;
+		ret.flags = flags;
+		switch ((kind & MASK_KIND_RVALUE))
+		{
+			case VALUE_BOOL:
+			case VALUE_REAL: if (val > 0.5) ret.val = 0.0; else ret.val = 1.0;
+			case VALUE_INT32: if (v32 > 1) ret.v32 = 0; else ret.v32 = 1;
+			case VALUE_INT64: if (v64 > 1L) ret.v64 = 0L; else ret.v64 = 1L;
+			default: abort();
+		}
+
+		return ret;
+	}
+
 	RValue& operator++()
 	{
 		switch (kind & MASK_KIND_RVALUE)
@@ -386,6 +458,7 @@ struct RValue
 			case VALUE_REAL: ++val; break;
 			case VALUE_INT32: ++v32; break;
 			case VALUE_INT64: ++v64; break;
+			case VALUE_PTR: ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(ptr) + 1); break;
 			default: abort();
 		}
 		return *this;
@@ -403,9 +476,10 @@ struct RValue
 		switch (kind & MASK_KIND_RVALUE)
 		{
 			case VALUE_BOOL:
-			case VALUE_REAL: val--; break;
-			case VALUE_INT32: v32--; break;
-			case VALUE_INT64: v64--; break;
+			case VALUE_REAL: --val; break;
+			case VALUE_INT32: --v32; break;
+			case VALUE_INT64: --v64; break;
+			case VALUE_PTR: ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(ptr) - 1); break;
 			default: abort();
 		}
 		return *this;
@@ -418,7 +492,7 @@ struct RValue
 		return tmp;
 	}
 
-	inline bool operator==(const RValue& rhs)
+	bool operator==(const RValue& rhs) const
 	{
 		int lhsType = kind & MASK_KIND_RVALUE;
 		int rhsType = rhs.kind & MASK_KIND_RVALUE;
@@ -443,7 +517,7 @@ struct RValue
 		return lhsD == rhsD;
 	}
 
-	inline bool operator!=(const RValue& rhs)
+	inline bool operator!=(const RValue& rhs) const
 	{
 		return (!(operator==(rhs)));
 	}
@@ -453,7 +527,10 @@ struct RValue
 		const RValue* pV = nullptr;
 		if ((kind & MASK_KIND_RVALUE) == VALUE_ARRAY && (pRefArray != nullptr)) {
 			ldiv_t ind = ldiv(_index, VARIABLE_ARRAY_MAX_DIMENSION);
-			if (pRefArray->pOwner == nullptr) abort();
+			if (pRefArray->pOwner == nullptr) {
+				std::cout << "pRefArray->pOwner is NULL! The array has no owner!!!" << std::endl;
+				//abort();
+			}
 
 			const DynamicArrayOfRValue* pArr = nullptr;
 			if ((ind.quot >= 0) && (pRefArray != nullptr) && (ind.quot < pRefArray->length)) {
@@ -477,15 +554,9 @@ struct RValue
 		return *pV;
 	}
 
-	const RValue& operator[](const int _index)
+	const RValue& operator[](const int _index) const
 	{
 		return DoArrayIndex(_index);
-	}
-
-	const RValue& operator[](const double _index)
-	{
-		int _iindex = static_cast<int>(_index);
-		return operator[](_iindex);
 	}
 
 	std::string asString() const
@@ -559,12 +630,91 @@ struct RValue
 		}
 	}
 
+	int asInt32() const
+	{
+		switch (kind & MASK_KIND_RVALUE)
+		{
+			case VALUE_REAL:
+			case VALUE_BOOL: return static_cast<int>(std::floor(val));
+			case VALUE_INT32: return v32;
+			case VALUE_INT64: return static_cast<int>(v64);
+			case VALUE_PTR: return static_cast<int>(reinterpret_cast<intptr_t>(ptr));
+			case VALUE_STRING: {
+				try {
+					return std::stoi(pRefString->get());
+				}
+				catch (std::exception&) {
+					abort();
+				}
+			}
+			default: abort();
+		}
+	}
+
+	bool asBoolean() const
+	{
+		switch (kind & MASK_KIND_RVALUE)
+		{
+			case VALUE_REAL:
+			case VALUE_BOOL: return val > 0.5 ? true : false;
+			case VALUE_INT32: return v32 > 0 ? true : false;
+			case VALUE_INT64: return v64 > 0L ? true : false;
+			case VALUE_PTR: return ptr != nullptr ? true : false;
+			case VALUE_STRING: {
+				try {
+					const std::string v = pRefString->get();
+					if (v == "true" || v == "True")
+						return true;
+					else if (v == "false" || v == "False")
+						return false;
+					abort();
+				}
+				catch (std::exception&) {
+					abort();
+				}
+			}
+			default: abort();
+		}
+	}
+
+	long long asInt64() const
+	{
+		switch (kind & MASK_KIND_RVALUE)
+		{
+			case VALUE_REAL:
+			case VALUE_BOOL: return static_cast<long long>(std::floor(val));
+			case VALUE_INT32: return static_cast<long long>(v32);
+			case VALUE_INT64: return v64;
+			case VALUE_PTR: return static_cast<long long>(reinterpret_cast<uintptr_t>(ptr));
+			case VALUE_STRING: {
+				try {
+					return std::stoll(pRefString->get());
+				}
+				catch (std::exception&) {
+					abort();
+				}
+			}
+			default: abort();
+		}
+	}
+
 	bool isNumber() const
 	{
 		int mKind = kind & MASK_KIND_RVALUE;
 		return (mKind == VALUE_REAL || mKind == VALUE_INT32 || mKind == VALUE_INT64 || mKind == VALUE_BOOL);
 	}
+
+	operator double() const { return asReal(); }
+	operator int() const { return asInt32(); }
+	operator long() const { return asInt32(); }
+	operator long long() const { return asInt64(); }
+	operator bool() const { return asBoolean(); }
 };
+
+typedef YYObjectBase*(*GetCtxStackTop)(void);
+typedef void(*DetPotRoot)(YYObjectBase* _pContainer, YYObjectBase* _pObject);
+extern GetCtxStackTop GetContextStackTop;
+extern DetPotRoot DeterminePotentialRoot;
 
 void COPY_RValue__Post(RValue* _pDest, const RValue* _pSource)
 {
@@ -602,8 +752,8 @@ void COPY_RValue__Post(RValue* _pDest, const RValue* _pSource)
 		_pDest->pObj = _pSource->pObj;
 
 		if (_pDest->pObj != nullptr) {
-			// TODO!!
-			abort();
+			YYObjectBase* pContainer = GetContextStackTop();
+			DeterminePotentialRoot(pContainer, _pSource->pObj);
 		}
 		break;
 	}
@@ -633,13 +783,6 @@ class cARRAY_OF_POINTERS {
 	int m_slotsUsed;
 	int m_reserveSize;
 	void** Array;
-
-	~cARRAY_OF_POINTERS() {
-		if (this->Length != 0) {
-			this->Array = nullptr;
-			delete this;
-		}
-	}
 };
 
 template<class T>
@@ -807,6 +950,11 @@ public:
 	int m_curMask;
 	int m_growThreshold;
 	Element<K, V, I>* m_elements;
+
+	int GetIdealPosition(Hash _h)
+	{
+		return this->m_curMask & _h;
+	}
 };
 
 template<class T>
@@ -825,20 +973,23 @@ struct SLinkedList {
 
 struct DynamicArrayOfInteger {
 	int length;
-	//char pad[sizeof(int)];
 	int* arr;
+
+	int Grow(int growBy = 5)
+	{
+		length += growBy;
+		MMSetLength(reinterpret_cast<void**>(&arr), length * sizeof(*arr), "Files\\Code\\Code_Function.cpp", 71);
+		return length;
+	}
 };
+
 
 class CInstanceBase
 {
 public:
-	RValue*		yyvars;
+	RValue* yyvars;
 	virtual ~CInstanceBase() { };
-	RValue& GetYYVarRef(int index)
-	{
-		// TODO: it's a bit more complicated than that?
-		return yyvars[index];
-	}
+	virtual RValue& GetYYVarRef(int index) = 0;
 };
 
 class YYObjectBase : public CInstanceBase {
@@ -849,9 +1000,9 @@ public:
 	pcre* m_pcre;
 	pcre_extra* m_pcreExtra;
 	char * m_class;
-	void(*m_getOwnProperty)(YYObjectBase *, RValue *, char *);
-	void(*m_deleteProperty)(YYObjectBase *, RValue *, char *, bool);
-	EJSRetValBool(*m_defineOwnProperty)(YYObjectBase *, char *, RValue *, bool);
+	void(*m_getOwnProperty)(YYObjectBase* object, RValue* res, char* name);
+	void(*m_deleteProperty)(YYObjectBase* object, RValue* res, char* name, bool flag);
+	EJSRetValBool(*m_defineOwnProperty)(YYObjectBase* object, char* name, RValue* res, bool flag);
 	CHashMap<int,RValue*,3>* m_yyvarsMap;
 	unsigned int m_nvars;
 	unsigned int m_flags;
@@ -867,6 +1018,11 @@ public:
 	char* m_pStackTrace;
 	//char* m_pVMStackTrace;
 };
+
+typedef bool(*VarGetValDirect)(YYObjectBase *inst, int var_ind, int array_ind, RValue *res);
+extern VarGetValDirect Variable_GetValue_Direct;
+typedef int(*FindRValSlot)(YYObjectBase* object, const char* name);
+extern FindRValSlot FindRValueSlot;
 
 struct YYRECT {
 	int bbox_left;
@@ -965,11 +1121,8 @@ public:
 	int i_flags;
 };
 
-int a = sizeof(CCode);
-
 class CEvent {
 public:
-	//void* _vptr_pointer;
 	CCode* e_code;
 	int m_OwnerObjectID;
 
@@ -999,8 +1152,6 @@ public:
 
 	}
 };
-
-//int a = sizeof(CEvent);
 
 class CObjectGM {
 public:
@@ -1140,15 +1291,14 @@ public:
 
 #pragma pack(pop)
 
-extern YYVAR** g_BuiltinFuncs;
 extern YYGMLFunc* g_GMLScripts;
 extern YYVAR** g_Variables;
 extern CRoom** g_RunRoom;
 extern CInstance* g_Self;
+extern CInstance* g_Other;
 extern CHash<CObjectGM>** g_ObjectHashTable;
 extern DynamicArrayOfInteger* g_ObjectHasEvent;
 extern int* g_ObjectNumEvent;
-extern int* g_CurrentRoom;
 
 typedef void(*GML_ObjectEvent)(CInstance* _pSelf, CInstance* _pOther);
 typedef RValue&(*GML_Script)(CInstance* _pSelf, CInstance* _pOther, RValue& _result, int _count, const RValue** _args);
@@ -1166,6 +1316,8 @@ struct RFunction {
 extern int* g_RFunctionTableLen;
 extern RFunction** g_RFunctionTable;
 
+#define RUNTIME_MAX_ARGS (0x10)
+
 typedef std::list<RValue> RValueList;
 void CallRFunction(int id, RValue& ret, const RValueList& args)
 {
@@ -1173,24 +1325,16 @@ void CallRFunction(int id, RValue& ret, const RValueList& args)
 
 	RFunction RFunc = (*g_RFunctionTable)[id];
 	int i = 0;
-	int argc = args.size();
+	int argc = static_cast<int>(args.size());
 
 	// allocate arguments **on the stack!** because GameMaker is stupid.
-	RValue Rargs[16]{ 0.0 };
+	RValue Rargs[RUNTIME_MAX_ARGS]{ /* will execute the default constructor */ };
 	for (const auto& rv : args) {
 		if (i >= sizeof(Rargs)) abort();
 		Rargs[i] = rv; i++;
 	}
 
-	RFunc.f_routine(ret, g_Self, nullptr, argc, Rargs);
-}
-
-void CallGMLFunction(int id, RValue& ret, const RValueList& args)
-{
-	if (id < 0) abort();
-
-	// do the magic.
-	CallRFunction(g_BuiltinFuncs[id]->val, ret, args);
+	RFunc.f_routine(ret, g_Self, g_Other, argc, Rargs);
 }
 
 void CallScriptFunction(int id, RValue& ret, const RValueList& args, bool isEvent = false)
@@ -1216,7 +1360,7 @@ void CallScriptFunction(int id, RValue& ret, const RValueList& args, bool isEven
 		}
 
 		// call
-		reinterpret_cast<GML_Script>(myFunc.ptr)(g_Self, nullptr, ret, args.size(), Arguments);
+		reinterpret_cast<GML_Script>(myFunc.ptr)(g_Self, g_Other, ret, static_cast<int>(args.size()), Arguments);
 
 		// clean up.
 		if (Arguments != nullptr) delete[] Arguments;
