@@ -26,5 +26,3 @@
 #define YYSTraceStart_Addr     (0x01AD8B90u)
 #define VarGetValueDirect_Addr (0x014FAE90u)
 #define FindRValueSlot_Addr    (0x01525AA0u)
-#define Object_Has_Event_Addr  (0x01D20220u)
-#define Object_Num_Event_Addr  (0x01D27A20u)

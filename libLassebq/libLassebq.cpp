@@ -4,14 +4,15 @@
 #include "libLassebq.h"
 #include "KatanaZero.h"
 #include "KatanaZeroIDs.h"
+#include "Utils.h"
 #include <WinCon.h>
 #include <fstream>
 #include <shellapi.h>
 #include <unordered_map>
+#include <sstream>
 
 #define PROMPT "> "
 #define PRINT_VAR(cl,n) oS << #n << " = " << cl->i_##n << std::endl
-
 
 HMODULE exeBase = nullptr;
 YYVAR** g_Variables = nullptr;
@@ -19,32 +20,15 @@ YYGMLFunc* g_GMLScripts = nullptr;
 CRoom** g_RunRoom = nullptr;
 RFunction** g_RFunctionTable = nullptr;
 CHash<CObjectGM>** g_ObjectHashTable = nullptr;
-SYYStackTrace** SYYStackTrace::s_pStart = nullptr;
-DynamicArrayOfInteger* g_ObjectHasEvent = nullptr;
-int* g_ObjectNumEvent = nullptr;
 int* g_RFunctionTableLen = nullptr;
 CInstance* g_Self = nullptr;
 CInstance* g_Other = nullptr;
-const char** g_WorkingDirectory = nullptr;
 int g_GMLScriptsSize;
 int g_VariablesSize;
-int g_LLBQObject = -1;
-FREE_RVal_Pre FREE_RValue__Pre;
-YYSetStr YYSetString;
-YYCreStr YYCreateString;
 GMMMSetLength MMSetLength;
-HWND g_YYGMWindowHWND;
 
-GetCtxStackTop GetContextStackTop = nullptr;
-DetPotRoot DeterminePotentialRoot = nullptr;
 VarGetValDirect Variable_GetValue_Direct = nullptr;
 FindRValSlot FindRValueSlot = nullptr;
-
-// RegisterCallback stuff
-GML_ds_map_create ds_map_create = nullptr;
-GML_ds_map_add_real ds_map_add_real = nullptr;
-GML_ds_map_add_string ds_map_add_string = nullptr;
-GML_create_async_event create_async_event = nullptr;
 
 std::unordered_map<std::string, int> fR;
 std::unordered_map<std::string, int> fS;
@@ -54,56 +38,6 @@ RValue Result(0.0);
 
 void lassebq_free_result() {
 	Result.~RValue();
-	memset(&Result, 0, sizeof(RValue));
-	Result.kind = VALUE_UNSET;
-	Result.v64 = 0L;
-	Result.flags = 0;
-}
-
-void clearConsole()
-{
-	HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-	COORD coordScreen = { 0, 0 };    // home for the cursor
-	DWORD cCharsWritten = 0;
-	DWORD dwConSize = 0;
-	CONSOLE_SCREEN_BUFFER_INFO csbi;
-
-	// Get the number of character cells in the current buffer.
-	if (!GetConsoleScreenBufferInfo(hConsole, &csbi))
-	{
-		return;
-	}
-
-	dwConSize = csbi.dwSize.X * csbi.dwSize.Y;
-
-	// Fill the entire screen with blanks.
-	if (!FillConsoleOutputCharacter(hConsole,        // Handle to console screen buffer
-		TEXT(' '),      // Character to write to the buffer
-		dwConSize,       // Number of cells to write
-		coordScreen,     // Coordinates of first cell
-		&cCharsWritten)) // Receive number of characters written
-	{
-		return;
-	}
-
-	// Get the current text attribute.
-	if (!GetConsoleScreenBufferInfo(hConsole, &csbi))
-	{
-		return;
-	}
-
-	// Set the buffer's attributes accordingly.
-	if (!FillConsoleOutputAttribute(hConsole,         // Handle to console screen buffer
-		csbi.wAttributes, // Character attributes to use
-		dwConSize,        // Number of cells to set attribute
-		coordScreen,      // Coordinates of first cell
-		&cCharsWritten))  // Receive number of characters written
-	{
-		return;
-	}
-
-	// Put the cursor at its home coordinates.
-	SetConsoleCursorPosition(hConsole, coordScreen);
 }
 
 bool lassebq_getvar_direct(std::string name, RValue& ret, int array_index = ARRAY_INDEX_NO_INDEX)
@@ -115,21 +49,6 @@ bool lassebq_getvar_direct(std::string name, RValue& ret, int array_index = ARRA
 	}
 
 	return Variable_GetValue_Direct(reinterpret_cast<YYObjectBase*>(g_Self), fV[name], array_index, &ret);
-}
-
-const char* lassebq_get_working_directory()
-{
-	return *g_WorkingDirectory;
-}
-
-void lassebq_dbg()
-{
-	std::cout << "Waiting for Visual Studio's debugger..." << std::endl;
-
-	while (IsDebuggerPresent() == FALSE)
-	{
-		Sleep(100);
-	}
 }
 
 void lassebq_callr(std::string id, const RValueList& args = { })
@@ -197,11 +116,8 @@ void lassebq_playerGUI_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 	YY_STACKTRACE_LINE(1);
 	g_Self = _pSelf; // SET GLOBAL LIBLASSEBQ SELF TO ***OUR*** SELF!!!
 	g_Other = _pOther; // not really required, but still!
-
+	
 	// get refs to player vars
-	quickvarR(vsp);
-	quickvarR(hsp);
-	quickvarR(can_move);
 	quickvarB(x);
 	quickvarB(y);
 	quickvarB(fps);
@@ -209,12 +125,6 @@ void lassebq_playerGUI_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 
 	std::stringstream ss;
 	ss  << "liblassebq player debugger:" << std::endl
-		<< "custom vars (unset for now, because I'm a stupid idiot):" << std::endl
-		// add your stuff here.
-		varS(vsp)
-		varS(hsp)
-		varS(can_move)
-		<< "builtin vars (should work):" << std::endl
 		varS(x)
 		varS(y)
 		varS(fps)
@@ -233,24 +143,6 @@ void lassebq_playerGUI_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 	lassebq_callr("draw_rectangle_color", { 64.0 - 2.0, 64.0 - 2.0, 64.0 + w + 2.0, 64.0 + h + 2.0, 0.0, 0.0, 0.0, 0.0, 0.0 });
 	lassebq_callr("draw_set_alpha", { 1.0 });
 	lassebq_callr("draw_text", { 64.0, 64.0, ss.str() });
-}
-
-void allocConsoleQuick()
-{
-	FILE *__fDummy;
-	BOOL bResult;
-
-	bResult = AllocConsole();
-
-	if (bResult == TRUE)
-	{
-		_wfreopen_s(&__fDummy, L"CONIN$", L"r", stdin);
-		_wfreopen_s(&__fDummy, L"CONOUT$", L"w", stderr);
-		_wfreopen_s(&__fDummy, L"CONOUT$", L"w", stdout);
-		//SetConsoleCP(CP_UTF8);
-		SetConsoleOutputCP(CP_UTF8);
-		SetConsoleTitle(TEXT("a cat in need is a cat indeed."));
-	}
 }
 
 typedef CEvent*(__thiscall *GetEvRecurs)(CObjectGM* self, int etype, int esubtype);
@@ -347,7 +239,6 @@ CObjectGM* lassebq_make_obj_liblassebq()
 	// Since Run_Room is NULL, we're not actually in any room just yet
 	// WHICH MEANS, WE CAN DO THIS:
 	lassebq_callr("room_instance_add", { EtoD(GameRooms::room_init), 0.0, 0.0, obj_index });
-	g_LLBQObject = obj_index;
 	// room_instance_add our object at position 0;0
 
 	return oNode; // return our object so we can patch events :D
@@ -355,7 +246,7 @@ CObjectGM* lassebq_make_obj_liblassebq()
 
 void lassebq_initYYC()
 {
-	allocConsoleQuick();
+	AllocConsoleQuick();
 
 	exeBase = GetModuleHandleW(nullptr);
 	uintptr_t exeAsUint = reinterpret_cast<uintptr_t>(exeBase);
@@ -388,8 +279,6 @@ void lassebq_initYYC()
 	g_RFunctionTableLen = reinterpret_cast<int*>(exeAsUint + RFunctionTableL_Addr);
 	g_RFunctionTable = reinterpret_cast<RFunction**>(exeAsUint + RFunctionTable_Addr);
 	g_ObjectHashTable = reinterpret_cast<CHash<CObjectGM>**>(exeAsUint + Object_Hash_Addr);
-	g_ObjectHasEvent = reinterpret_cast<DynamicArrayOfInteger*>(exeAsUint + Object_Has_Event_Addr);
-	g_ObjectNumEvent = reinterpret_cast<int*>(exeAsUint + Object_Num_Event_Addr);
 	FREE_RValue__Pre = reinterpret_cast<FREE_RVal_Pre>(exeAsUint + FREE_RValue__Pre_Addr);
 	YYSetString = reinterpret_cast<YYSetStr>(exeAsUint + YYSetString_Addr);
 	YYCreateString = reinterpret_cast<YYCreStr>(exeAsUint + YYCreateString_Addr);
@@ -410,9 +299,6 @@ void lassebq_initYYC()
 		fR[RFunc->f_name] = i;
 	}
 
-	lassebq_callr("window_handle");
-	g_YYGMWindowHWND = reinterpret_cast<HWND>(Result.ptr);
-
 	lassebq_patchObject(lassebq_make_obj_liblassebq());
 }
 
@@ -422,13 +308,13 @@ void lassebq_print_global_rvars(std::ostream& oS)
 	RValue arr(Result);
 
 	oS << "-------------------------------" << std::endl;
-	if (arr.pRefArray->pArray == nullptr)
+	if (arr.asArray() == nullptr)
 	{
 		oS << "No RValues!" << std::endl;
 	}
 	else
 	{
-		int arrlen = arr.pRefArray->pArray->length;
+		int arrlen = arr.asArray()->length;
 
 		for (int i = 0; i < arrlen; i++)
 		{
@@ -464,13 +350,13 @@ void lassebq_print_instance_rvars(int instid, std::ostream& oS)
 	int variable_instance_get = fR["variable_instance_get"];
 	CallRFunction(variable_instance_get_names, arr, { instid });
 
-	if (arr.pRefArray->pArray == nullptr)
+	if (arr.asArray() == nullptr)
 	{
 		std::cout << "No RValues!" << std::endl;
 	}
 	else
 	{
-		int arrlen = arr.pRefArray->pArray->length;
+		int arrlen = arr.asArray()->length;
 
 		for (int i = 0; i < arrlen; i++)
 		{
@@ -596,7 +482,6 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 	std::cout << "Base address: " << exeBase << std::endl;
 	std::cout << "Variables: " << g_VariablesSize << std::endl;
 	std::cout << "Scripts: " << g_GMLScriptsSize << std::endl;
-	std::cout << "Window handle: " << g_YYGMWindowHWND << std::endl;
 	std::cout << std::endl;
 	std::cout << "CreateDsMap: " << ds_map_create << std::endl;
 	std::cout << "DsMapAddDouble: " << ds_map_add_real << std::endl;
@@ -751,7 +636,7 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 
 				std::cout << "Return value: " << Result.asString() << std::endl;
 			}
-			catch (std::exception&) {
+			catch (const std::exception&) {
 				lassebq_wrong_args();
 			}
 		}
@@ -786,7 +671,7 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 
 				std::cout << "Return value: " << Result.asString() << std::endl;
 			}
-			catch (std::exception&) {
+			catch (const std::exception&) {
 				lassebq_wrong_args();
 			}
 		}
@@ -807,7 +692,7 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 
 				std::cout << "Called!" << std::endl;
 			}
-			catch (std::exception&) {
+			catch (const std::exception&) {
 				lassebq_wrong_args();
 			}
 		}
@@ -840,7 +725,7 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 
 				std::cout << "Set!" << std::endl;
 			}
-			catch (std::exception& exc) {
+			catch (const std::exception& exc) {
 				std::cout << exc.what() << std::endl;
 				lassebq_wrong_args();
 			}
@@ -872,20 +757,14 @@ DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
 
 				std::cout << "Set!" << std::endl;
 			}
-			catch (std::exception& exc) {
+			catch (const std::exception& exc) {
 				std::cout << exc.what() << std::endl;
 				lassebq_wrong_args();
 			}
 		}
 		else if (cmd_argv[0] == L"cls")
 		{
-			clearConsole();
-		}
-		else if (cmd_argv[0] == L"test")
-		{
-			YYVAR* vv = g_Variables[0xb19];
-			std::cout << "VARNAME: " << vv->pName << std::endl;
-			std::cout << "PTR: " << vv->val << std::endl;
+			ClearConsole();
 		}
 	}
 
