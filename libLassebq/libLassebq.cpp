@@ -52,15 +52,6 @@ std::unordered_map<std::string, int> fV;
 
 RValue Result(0.0);
 
-typedef RValue&(__thiscall *GetYYVRef)(YYObjectBase *self, int _index);
-GetYYVRef InternalGetYYVarRef = nullptr;
-RValue& GetRVRef(CInstance* self, int i)
-{
-	if (self->yyvars != nullptr)
-		return self->yyvars[i];
-	return InternalGetYYVarRef(reinterpret_cast<YYObjectBase *>(self), i);
-}
-
 void lassebq_free_result() {
 	Result.~RValue();
 	memset(&Result, 0, sizeof(RValue));
@@ -195,7 +186,7 @@ void lassebq_DrawGUI_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 	g_Other = _pOther; // not really required, but still!
 }
 
-#define quickvarR(_RVV) RValue& _RVV(GetRVRef(g_Self, fV[#_RVV]))
+#define quickvarR(_RVV) const RValue& _RVV(_pSelf->GetRVRef(fV[#_RVV]))
 #define quickvarB(_RVV) RValue _RVV; lassebq_getvar_direct(#_RVV, _RVV)
 #define varS(_RVV) << #_RVV << " = " << _RVV.asString() << std::endl
 
@@ -402,7 +393,6 @@ void lassebq_initYYC()
 	FREE_RValue__Pre = reinterpret_cast<FREE_RVal_Pre>(exeAsUint + FREE_RValue__Pre_Addr);
 	YYSetString = reinterpret_cast<YYSetStr>(exeAsUint + YYSetString_Addr);
 	YYCreateString = reinterpret_cast<YYCreStr>(exeAsUint + YYCreateString_Addr);
-	InternalGetYYVarRef = reinterpret_cast<GetYYVRef>(exeAsUint + GetYYVarRef_Addr);
 	g_Self = nullptr;
 	SYYStackTrace::s_pStart = reinterpret_cast<SYYStackTrace**>(exeAsUint + YYSTraceStart_Addr);
 

@@ -772,6 +772,18 @@ enum EJSRetValBool {
 	EJSRVB_TYPE_ERROR = 2
 };
 
+enum EHasInstanceRetVal {
+	E_FALSE = 0x0,
+	E_TRUE = 0x1,
+	E_TYPE_ERROR = 0x2
+};
+
+enum EObjectBaseFlags {
+	EOBF_NONE = 0x0,
+	EOBF_EXTENSIBLE = 0x1,
+	EOBF_HAVE_RUN_DISPOSE = 0x2
+};
+
 template<class T>
 class cARRAY_STRUCTURE {
 	int Length;
@@ -791,6 +803,7 @@ public:
 	T* m_pFirst;
 	T* m_pLast;
 	int m_Count;
+	eDeleteType m_DeleteType;
 };
 
 template<class T>
@@ -798,7 +811,7 @@ class LinkedList {
 	T* m_pFirst;
 	T* m_pLast;
 	int m_Count;
-
+	eDeleteType m_DeleteType;
 };
 
 struct YYRoomTiles {
@@ -969,6 +982,7 @@ struct SLinkedList {
 	SLinkedListNode<T>* m_pFirst;
 	SLinkedListNode<T>* m_pLast;
 	int m_Count;
+	//eDeleteType m_DeleteType;
 };
 
 struct DynamicArrayOfInteger {
@@ -987,36 +1001,42 @@ struct DynamicArrayOfInteger {
 class CInstanceBase
 {
 public:
-	RValue* yyvars;
+	RValue*		yyvars;
 	virtual ~CInstanceBase() { };
-	virtual RValue& GetYYVarRef(int index) = 0;
+	virtual RValue& InternalGetYYVarRef(int index) = 0;
 };
 
+typedef void(*GetOwnPropertyFunc)(YYObjectBase* object, RValue* res, char* name);
+typedef void(*DeletePropertyFunc)(YYObjectBase* object, RValue* res, char* name, bool flag);
+typedef EJSRetValBool(*DefineOwnPropertyFunc)(YYObjectBase* object, char* name, RValue* res, bool flag);
+
+
 class YYObjectBase : public CInstanceBase {
-public:
-	YYObjectBase * m_pNextObject;
-	YYObjectBase * m_pPrevObject;
-	YYObjectBase * m_prototype;
+	YYObjectBase* m_pNextObject;
+	YYObjectBase* m_pPrevObject;
+	YYObjectBase* m_prototype;
 	pcre* m_pcre;
 	pcre_extra* m_pcreExtra;
-	char * m_class;
-	void(*m_getOwnProperty)(YYObjectBase* object, RValue* res, char* name);
-	void(*m_deleteProperty)(YYObjectBase* object, RValue* res, char* name, bool flag);
-	EJSRetValBool(*m_defineOwnProperty)(YYObjectBase* object, char* name, RValue* res, bool flag);
-	CHashMap<int,RValue*,3>* m_yyvarsMap;
+	char* m_class;
+	GetOwnPropertyFunc m_getOwnProperty;
+	DeletePropertyFunc m_deleteProperty;
+	DefineOwnPropertyFunc m_defineOwnProperty;
+	CHashMap<int, RValue*, 3>* m_yyvarsMap;
 	unsigned int m_nvars;
 	unsigned int m_flags;
 	unsigned int m_capacity;
 	unsigned int m_visited;
 	unsigned int m_visitedGC;
-	int m_GCgen;
+	int m_GCGen;
 	int m_GCcreationframe;
 	int m_slot;
 	int m_kind;
 	int m_rvalueInitType;
 	int m_curSlot;
-	char* m_pStackTrace;
-	//char* m_pVMStackTrace;
+	int m_unused;
+public:
+	virtual ~YYObjectBase() { };
+	virtual RValue& InternalGetYYVarRef(int index) = 0;
 };
 
 typedef bool(*VarGetValDirect)(YYObjectBase *inst, int var_ind, int array_ind, RValue *res);
@@ -1173,7 +1193,7 @@ public:
 class CInstance : public YYObjectBase {
 public:
 	long long m_CreateCounter;
-	CObjectGM * m_pObject;
+	CObjectGM* m_pObject;
 	struct CPhysicsObject * m_pPhysicsObject;
 	struct CSkeletonInstance * m_pSkeletonAnimation;
 	unsigned int m_Instflags;
@@ -1218,6 +1238,14 @@ public:
 	float i_currentdepth;
 	float i_lastImageNumber;
 	unsigned int i_collisionTestNumber;
+	virtual ~CInstance() { /**/ };
+	RValue& GetRVRef(int index)
+	{
+		if (this->yyvars != nullptr)
+			return this->yyvars[index];
+		else
+			return InternalGetYYVarRef(index);
+	}
 };
 
 struct YYRoom {
