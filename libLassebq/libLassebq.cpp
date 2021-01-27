@@ -15,17 +15,9 @@
 #define PRINT_VAR(cl,n) oS << #n << " = " << cl->i_##n << std::endl
 
 HMODULE exeBase = nullptr;
-YYVAR** g_Variables = nullptr;
-YYGMLFunc* g_GMLScripts = nullptr;
-CRoom** g_RunRoom = nullptr;
-RFunction** g_RFunctionTable = nullptr;
 CHash<CObjectGM>** g_ObjectHashTable = nullptr;
-int* g_RFunctionTableLen = nullptr;
-CInstance* g_Self = nullptr;
-CInstance* g_Other = nullptr;
 int g_GMLScriptsSize;
 int g_VariablesSize;
-GMMMSetLength MMSetLength;
 
 VarGetValDirect Variable_GetValue_Direct = nullptr;
 FindRValSlot FindRValueSlot = nullptr;
@@ -105,7 +97,7 @@ void lassebq_DrawGUI_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 	g_Other = _pOther; // not really required, but still!
 }
 
-#define quickvarR(_RVV) const RValue& _RVV(_pSelf->GetRVRef(fV[#_RVV]))
+#define quickvarR(_RVV) RValue& _RVV(_pSelf->GetRVRef(fV[#_RVV]))
 #define quickvarB(_RVV) RValue _RVV; lassebq_getvar_direct(#_RVV, _RVV)
 #define varS(_RVV) << #_RVV << " = " << _RVV.asString() << std::endl
 
@@ -118,31 +110,28 @@ void lassebq_playerGUI_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 	g_Other = _pOther; // not really required, but still!
 	
 	// get refs to player vars
-	quickvarB(x);
-	quickvarB(y);
 	quickvarB(fps);
 	quickvarB(fps_real);
+	quickvarR(x);
+	x = 999.0;
 
-	std::stringstream ss;
-	ss  << "liblassebq player debugger:" << std::endl
-		varS(x)
-		varS(y)
-		varS(fps)
-		varS(fps_real)
-		<< std::endl;
+
+	RValue text("lassebq player debugger:\n");
+	text += "fps = ";
+	text += "\nwhat?";
 
 	lassebq_callr("draw_set_halign", { 0.0 });
 	lassebq_callr("draw_set_valign", { 0.0 });
 	lassebq_callr("draw_set_font", { EtoD(GameFonts::font_songtitle) });
-	lassebq_callr("string_width", { ss.str() });
+	lassebq_callr("string_width", { text });
 	double w = Result.asReal();
-	lassebq_callr("string_height", { ss.str() });
+	lassebq_callr("string_height", { text });
 	double h = Result.asReal();
 	lassebq_callr("draw_set_color", { 8421376.0 });
 	lassebq_callr("draw_set_alpha", { 0.9 });
 	lassebq_callr("draw_rectangle_color", { 64.0 - 2.0, 64.0 - 2.0, 64.0 + w + 2.0, 64.0 + h + 2.0, 0.0, 0.0, 0.0, 0.0, 0.0 });
 	lassebq_callr("draw_set_alpha", { 1.0 });
-	lassebq_callr("draw_text", { 64.0, 64.0, ss.str() });
+	lassebq_callr("draw_text", { 64.0, 64.0, text });
 }
 
 typedef CEvent*(__thiscall *GetEvRecurs)(CObjectGM* self, int etype, int esubtype);
@@ -282,6 +271,8 @@ void lassebq_initYYC()
 	FREE_RValue__Pre = reinterpret_cast<FREE_RVal_Pre>(exeAsUint + FREE_RValue__Pre_Addr);
 	YYSetString = reinterpret_cast<YYSetStr>(exeAsUint + YYSetString_Addr);
 	YYCreateString = reinterpret_cast<YYCreStr>(exeAsUint + YYCreateString_Addr);
+	YYAddString = reinterpret_cast<YYAddStr>(exeAsUint + YYAddString_Addr);
+	YYFree = reinterpret_cast<YYFreeT>(exeAsUint + YYFree_Addr);
 	g_Self = nullptr;
 	SYYStackTrace::s_pStart = reinterpret_cast<SYYStackTrace**>(exeAsUint + YYSTraceStart_Addr);
 
@@ -289,7 +280,6 @@ void lassebq_initYYC()
 	DeterminePotentialRoot = reinterpret_cast<DetPotRoot>(exeAsUint + DeterminePotRoot_Addr);
 	GetEventRecursive = reinterpret_cast<GetEvRecurs>(exeAsUint + GetEvRecursive_Addr);
 	InsertEvent = reinterpret_cast<InsertEv>(exeAsUint + InsertEvent_Addr);
-	MMSetLength = reinterpret_cast<GMMMSetLength>(exeAsUint + GMMMSetLength_Addr);
 	Variable_GetValue_Direct = reinterpret_cast<VarGetValDirect>(exeAsUint + VarGetValueDirect_Addr);
 	FindRValueSlot = reinterpret_cast<FindRValSlot>(exeAsUint + FindRValueSlot_Addr);
 

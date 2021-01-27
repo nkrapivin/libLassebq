@@ -49,8 +49,13 @@ struct RValue;
 typedef void(*FREE_RVal_Pre)(RValue* p);
 typedef void(*YYSetStr)(RValue* _pVal, const char* _pS);
 typedef void(*YYCreStr)(RValue* _pVal, const char* _pS);
+typedef char*(*YYAddStr)(const char* _first, const char* _second);
+typedef char*(*YYDupStr)(const char* _pStr);
+typedef void(*YYFreeT)(void* _pMemory);
 extern YYSetStr YYSetString;
 extern YYCreStr YYCreateString;
+extern YYAddStr YYAddString;
+extern YYFreeT YYFree;
 extern FREE_RVal_Pre FREE_RValue__Pre;
 
 template <typename T> struct _RefThing
@@ -160,6 +165,8 @@ public:
 
 	RValue& operator--();
 	RValue& operator--(int);
+
+	RValue& operator+=(const char* v);
 
 	bool operator==(const RValue& rhs) const;
 	bool operator!=(const RValue& rhs) const;

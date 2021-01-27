@@ -4,6 +4,9 @@
 #include "RValue.h"
 #include "GMCallbacks.h"
 #include "SYYStackTrace.h"
+#include "GMLFuncs.h"
+#include "Data.h"
+#include "Room.h"
 #include <vector>
 #include <iostream>
 #include <list>
@@ -45,262 +48,30 @@ enum ERV_KIND {
 #define JS_BUILTIN_PROPERTY_DEFAULT        (ERV_Writable | ERV_Configurable)
 #define JS_BUILTIN_LENGTH_PROPERTY_DEFAULT (ERV_None)
 
-struct YYVAR
+enum EJSRetValBool
 {
-	const char* pName;
-	int val;
-};
-
-struct YYGMLFunc
-{
-	const char* pName;
-	void* ptr;
-};
-
-#pragma pack( push, 4)
-class YYObjectBase;
-
-typedef void(*GMMMSetLength)(void **buf, size_t new_length, char* _pFile, int _line);
-extern GMMMSetLength MMSetLength;
-
-enum eDeleteType : int {
-	eDelete_placementdelete = 3,
-	eDelete_delete = 1,
-	eDelete_free = 2,
-	eDelete_none = 0
-};
-
-enum EJSRetValBool {
 	EJSRVB_TRUE = 1,
 	EJSRVB_FALSE = 0,
 	EJSRVB_TYPE_ERROR = 2
 };
 
-enum EHasInstanceRetVal {
+enum EHasInstanceRetVal
+{
 	E_FALSE = 0x0,
 	E_TRUE = 0x1,
 	E_TYPE_ERROR = 0x2
 };
 
-enum EObjectBaseFlags {
+enum EObjectBaseFlags
+{
 	EOBF_NONE = 0x0,
 	EOBF_EXTENSIBLE = 0x1,
 	EOBF_HAVE_RUN_DISPOSE = 0x2
 };
 
-template<class T>
-class cARRAY_STRUCTURE {
-	int Length;
-	T * Array;
-};
+class YYObjectBase;
 
-class cARRAY_OF_POINTERS {
-	int Length;
-	int m_slotsUsed;
-	int m_reserveSize;
-	void** Array;
-};
-
-template<class T>
-class OLinkedList {
-public:
-	T* m_pFirst;
-	T* m_pLast;
-	int m_Count;
-	eDeleteType m_DeleteType;
-};
-
-template<class T>
-class LinkedList {
-	T* m_pFirst;
-	T* m_pLast;
-	int m_Count;
-	eDeleteType m_DeleteType;
-};
-
-struct YYRoomTiles {
-	int count;
-};
-
-struct YYRoomInstances {
-	int count;
-};
-
-struct RTile {
-	float x;
-	float y;
-	int index;
-	int xo;
-	int yo;
-	int w;
-	int h;
-	float depth;
-	int id;
-	float xscale;
-	float yscale;
-	int blend;
-	float alpha;
-	bool visible;
-};
-
-class CBackGM {
-	bool visible;
-	bool foreground;
-	int index;
-	float x;
-	float y;
-	bool htiled;
-	bool vtiled;
-	float hspeed;
-	float vspeed;
-	float xscale;
-	float yscale;
-	int blend;
-	float alpha;
-};
-
-class CViewGM {
-	bool visible;
-	float xview;
-	float yview;
-	float wview;
-	float hview;
-	int xport;
-	int yport;
-	int wport;
-	int hport;
-	float angle;
-	int hborder;
-	int vborder;
-	int hspeed;
-	int vspeed;
-	int index;
-	int SurfaceID;
-	int cameraID;
-};
-
-class CTimingSource {
-	long long m_elapsed_micros;
-	long long m_last_micros;
-	bool m_paused;
-	double m_fps;
-	long long m_delta_micros;
-};
-
-class CLayer;
-
-class CLayerElementBase {
-	int m_type;
-	int m_id;
-	bool m_bRuntimeDataInitialised;
-	char * m_pName;
-	CLayer* m_pLayer;
-	CLayerElementBase * m_pNext;
-	CLayerElementBase * m_pPrev;
-};
-
-class CInstance;
-class CLayerInstanceElement : public CLayerElementBase {
-	int m_instanceID;
-	CInstance* m_pInstance;
-};
-
-class CLayer {
-	int m_id;
-	int m_depth;
-	float m_xoffset;
-	float m_yoffset;
-	float m_hspeed;
-	float m_vspeed;
-	bool m_visible;
-	bool m_deleting;
-	bool m_dynamic;
-	char * m_pName;
-	int m_beginScriptID;
-	int m_endScriptID;
-	int m_shaderID;
-	CTimingSource m_timer;
-	LinkedList<CLayerElementBase> m_elements;
-	CLayer* m_pNext;
-	CLayer* m_pPrev;
-};
-
-template<typename T>
-class HashNode {
-public:
-	HashNode<T>* m_pPrev;
-	HashNode<T>* m_pNext;
-	unsigned int m_ID;
-	T* m_pObj;
-};
-
-template<typename T>
-class HashLink {
-public:
-	T* m_pFirst;
-	T* m_pLast;
-};
-
-template<typename T>
-class CHash {
-public:
-	HashLink<HashNode<T>> *m_pHashingTable;
-	int m_HashingMask;
-	int m_Count;
-};
-
-typedef unsigned int Hash;
-
-template<class K, class V, int I>
-class Element {
-public:
-	V v; // Value
-	K k; // Key
-	Hash hash; // Hash
-};
-
-template<class K, class V, int I = 3>
-class CHashMap {
-public:
-	int m_curSize;
-	int m_numUsed;
-	int m_curMask;
-	int m_growThreshold;
-	Element<K, V, I>* m_elements;
-
-	int GetIdealPosition(Hash _h)
-	{
-		return this->m_curMask & _h;
-	}
-};
-
-template<class T>
-struct SLinkedListNode {
-	SLinkedListNode* m_pNext;
-	SLinkedListNode* m_pPrev;
-	T* m_pObj;
-};
-
-template<class T>
-struct SLinkedList {
-	SLinkedListNode<T>* m_pFirst;
-	SLinkedListNode<T>* m_pLast;
-	int m_Count;
-	//eDeleteType m_DeleteType;
-};
-
-struct DynamicArrayOfInteger {
-	int length;
-	int* arr;
-
-	int Grow(int growBy = 5)
-	{
-		length += growBy;
-		MMSetLength(reinterpret_cast<void**>(&arr), length * sizeof(*arr), "Files\\Code\\Code_Function.cpp", 71);
-		return length;
-	}
-};
-
+#pragma pack( push, 4)
 
 class CInstanceBase
 {
@@ -349,25 +120,12 @@ extern VarGetValDirect Variable_GetValue_Direct;
 typedef int(*FindRValSlot)(YYObjectBase* object, const char* name);
 extern FindRValSlot FindRValueSlot;
 
-struct YYRECT {
+struct YYRECT
+{
 	int bbox_left;
 	int bbox_top;
 	int bbox_right;
 	int bbox_bottom;
-};
-
-struct SLink;
-
-struct SLinkListEx {
-	SLink * head;
-	SLink * tail;
-	int offset;
-};
-
-struct SLink {
-	SLink * next;
-	SLink * prev;
-	SLinkListEx * list;
 };
 
 class cInstancePathAndTimeline {
@@ -446,36 +204,11 @@ public:
 	int i_flags;
 };
 
-class CEvent {
+class CEvent
+{
 public:
 	CCode* e_code;
 	int m_OwnerObjectID;
-
-	CEvent()
-	{
-		this->e_code = nullptr;
-		this->m_OwnerObjectID = 0;
-	}
-
-	~CEvent()
-	{
-
-	}
-
-	void Clear()
-	{
-		return;
-	}
-
-	bool Compile()
-	{
-		return true;
-	}
-
-	void Execute(CInstance* _self, CInstance* _other)
-	{
-
-	}
 };
 
 class CObjectGM {
@@ -549,182 +282,10 @@ public:
 		if (this->yyvars != nullptr)
 			return this->yyvars[index];
 		else
-		{
-			Hash hash = static_cast<Hash>(index) * 0x9E3779B1u + 1u;
-			unsigned int mask = this->m_yyvarsMap->m_curMask;
-			unsigned int size = this->m_yyvarsMap->m_curSize;
-			unsigned int position = mask & hash & 0x7fffffffU;
-			auto* elem = this->m_yyvarsMap->m_elements;
-			Hash ehash = elem[position].hash;
-			if (ehash != 0)
-			{
-				unsigned int i = -1;
-				do
-				{
-					unsigned int pos = position;
-					if (ehash == (hash & 0x7fffffffu))
-					{
-						if ((pos != UINT_MAX) && (elem[pos].v != nullptr))
-						{
-							return *elem[pos].v;
-						}
-						break;
-					}
-
-					i++;
-					if (((pos - (ehash & mask)) + size & mask) < i) break;
-					ehash = (pos + 1U) & mask;
-					position = ehash;
-					ehash = elem[ehash].hash;
-				} while (ehash != 0);
-			}
-
-			return *new RValue(-1337.0);
-		}
+			return InternalGetYYVarRef(index);
 	}
-};
-
-struct YYRoom {
-	const char* pName;
-	const char* pCaption;
-	int width;
-	int height;
-	int speed;
-	int persistent;
-	int colour;
-	int showColour;
-	unsigned int pCode;
-	int enableViews;
-	unsigned int pBackgrounds;
-	unsigned int pViews;
-	unsigned int pInstances;
-	unsigned int pTiles;
-	int physicsWorld;
-	int physicsWorldTop;
-	int physicsWorldLeft;
-	int physicsWorldRight;
-	int physicsWorldBottom;
-	float physicsWorldGravityX;
-	float physicsWorldGravityY;
-	float physicsWorldPixToMeters;
-};
-
-class CRoom {
-public:
-	int r_lasttile;
-	CRoom* instance_handle;
-	char* r_caption;
-	int r_speed;
-	int r_width;
-	int r_height;
-	bool r_persistent;
-	unsigned int r_color;
-	bool r_showcolor;
-	CBackGM* r_background[8];
-	bool r_enableviews;
-	bool r_clearscreen;
-	bool r_cleardisplaybuffer;
-	CViewGM* r_view[8];
-	char* r_code;
-	void* r_codeCode;
-	bool r_physicsWorld;
-	int r_physicsGravityX;
-	int r_physicsGravityY;
-	float r_physicsPixToMeters;
-	OLinkedList<CInstance> m_Active;
-	LinkedList<CInstance> m_Deactive;
-	CInstance* m_pMarkedFirst;
-	CInstance* m_pMarkedLast;
-	int * m_pCreationOrderList;
-	int m_CreationOrderListSize;
-	YYRoom* m_pRoom;
-	unsigned char * m_pBase;
-	void* m_pPhysicsWorld;
-	int r_tnumb;
-	cARRAY_STRUCTURE<RTile> r_tile;
-	YYRoomTiles * r_pTiles;
-	YYRoomInstances * r_pInstances;
-	char * m_pName;
-	bool m_isDuplicate;
-	LinkedList<CLayer> m_Layers;
-	CHashMap<int,CLayer*,7> m_LayerLookup;
-	CHashMap<int,CLayerElementBase*,7> m_LayerElementLookup;
-	CLayerElementBase * m_LastLayerElementLookedUp;
-	CHashMap<int,CLayerInstanceElement*,7> m_LayerInstanceElementLookup;
 };
 
 #pragma pack(pop)
 
-extern YYGMLFunc* g_GMLScripts;
-extern YYVAR** g_Variables;
-extern CRoom** g_RunRoom;
-extern CInstance* g_Self;
-extern CInstance* g_Other;
 extern CHash<CObjectGM>** g_ObjectHashTable;
-
-typedef void(*GML_ObjectEvent)(CInstance* _pSelf, CInstance* _pOther);
-typedef RValue&(*GML_Script)(CInstance* _pSelf, CInstance* _pOther, RValue& _result, int _count, const RValue** _args);
-typedef void(*TRoutine)(RValue& _result, CInstance* _pSelf, CInstance* _pOther, int _argc, RValue *_args);
-
-
-struct RFunction {
-	char f_name[64];
-	TRoutine f_routine;
-	int f_argnumb;
-	unsigned int m_UsageCount;
-	int f_maxargnumb; // always 0xFFFFFFFF
-};
-
-extern int* g_RFunctionTableLen;
-extern RFunction** g_RFunctionTable;
-
-#define RUNTIME_MAX_ARGS (0x10)
-
-typedef std::list<RValue> RValueList;
-void CallRFunction(int id, RValue& ret, const RValueList& args)
-{
-	if (id < 0) abort();
-
-	RFunction RFunc = (*g_RFunctionTable)[id];
-	int i = 0;
-	int argc = static_cast<int>(args.size());
-
-	// allocate arguments **on the stack!** because GameMaker is stupid.
-	RValue Rargs[RUNTIME_MAX_ARGS]{ /* will execute the default constructor */ };
-	for (const auto& rv : args) {
-		if (i >= sizeof(Rargs)) abort();
-		Rargs[i] = rv; i++;
-	}
-
-	RFunc.f_routine(ret, g_Self, g_Other, argc, Rargs);
-}
-
-void CallScriptFunction(int id, RValue& ret, const RValueList& args, bool isEvent = false)
-{
-	if (id < 0) abort();
-
-	// do the magic.
-	YYGMLFunc myFunc = g_GMLScripts[id];
-	if (isEvent)
-	{
-		// call
-		reinterpret_cast<GML_ObjectEvent>(myFunc.ptr)(g_Self, nullptr);
-	}
-	else
-	{
-		// prepare argument memory.
-		const RValue **Arguments = nullptr;
-		if (args.size() > 0)
-		{
-			Arguments = const_cast<const RValue**>(new RValue*[args.size()]);
-			int i = 0;
-			for (const auto& arg : args) { Arguments[i] = &arg; i++; }
-		}
-
-		// call
-		reinterpret_cast<GML_Script>(myFunc.ptr)(g_Self, g_Other, ret, static_cast<int>(args.size()), Arguments);
-
-		// clean up.
-		if (Arguments != nullptr) delete[] Arguments;
-	}
-}

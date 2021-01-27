@@ -145,10 +145,13 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Data.h" />
     <ClInclude Include="GMCallbacks.h" />
+    <ClInclude Include="GMLFuncs.h" />
     <ClInclude Include="KatanaZero.h" />
     <ClInclude Include="KatanaZeroIDs.h" />
     <ClInclude Include="libLassebq.h" />
+    <ClInclude Include="Room.h" />
     <ClInclude Include="RValue.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="SYYStackTrace.h" />
@@ -156,6 +159,7 @@
     <ClInclude Include="Utils.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Data.cpp" />
     <ClCompile Include="dllmain.cpp">
       <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</CompileAsManaged>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -171,7 +175,9 @@
       </PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="GMCallbacks.cpp" />
+    <ClCompile Include="GMLFuncs.cpp" />
     <ClCompile Include="libLassebq.cpp" />
+    <ClCompile Include="Room.cpp" />
     <ClCompile Include="RValue.cpp" />
     <ClCompile Include="stdafx.cpp" />
     <ClCompile Include="SYYStackTrace.cpp" />
