@@ -1,4 +1,4 @@
-/// libLassebq script
+/// libLassebq injector script
 /// @author Nikita Krapivin
 /// @version v1.0.0
 
@@ -61,7 +61,13 @@ void InjectDLL()
 	Data.FORM.EXTN.productIdData.Add(System.Text.Encoding.ASCII.GetBytes("LIBLASSEBQYYCDLL"));
 }
 
-// We start here.
-if (!ScriptQuestion("This will modify your .win, be sure to make a backup, proceed?")) return;
-InjectDLL();
-ScriptMessage("Done! Save and load the .win & start rocking!");
+bool ScriptEntry()
+{
+	// We start here.
+	if (!ScriptQuestion("This will modify your .win, be sure to make a backup, proceed?")) return false;
+	InjectDLL();
+	ScriptMessage("Done! Save the .win and start the game.");
+	return true;
+}
+
+if (!ScriptEntry()) return;

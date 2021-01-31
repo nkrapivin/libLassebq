@@ -313,16 +313,23 @@ void lassebq_patchObject(CObjectGM* gmObj)
 						CEvent* origev = GetEventRecursive(cogm, type, subtype);
 						if (origev != nullptr)
 						{
+							// Don't do anything if we've already added our lua stub.
+							if (origev->e_code->i_pFunc->ptr == lassebq_lua_GMLRoutine
+							||  origev->e_code->i_pFunc->ptr == lassebq_luaPatch_GMLRoutine)
+								continue;
+
 							std::cout << "AN EVENT " << pair.second << " ALREADY EXISTS! brb replacing..." << std::endl;
 							EventPatchMap[i][pair.first] = origev->e_code->i_pFunc->ptr; // save the original function.
 							origev->e_code->i_pFunc->ptr = lassebq_luaPatch_GMLRoutine;
 							continue;
 						}
-
-						memset(buf, 0, sizeof(buf));
-						snprintf(buf, sizeof(buf), "libLassebq_%s_%s", str, pair.second.c_str());
-						std::cout << "Adding event " << buf << "..." << std::endl;
-						lassebq_addEvent(cogm, type, subtype, buf, lassebq_lua_GMLRoutine);
+						else
+						{
+							memset(buf, 0, sizeof(buf));
+							snprintf(buf, sizeof(buf), "libLassebq_%s_%s", str, pair.second.c_str());
+							std::cout << "Adding event " << buf << "..." << std::endl;
+							lassebq_addEvent(cogm, type, subtype, buf, lassebq_lua_GMLRoutine);
+						}
 					}
 					lua_pop(lS, 1);
 				}
