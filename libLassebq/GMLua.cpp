@@ -530,6 +530,12 @@ int lua_GMLua_instToPtr(lua_State* _pL)
 	}
 }
 
+int lua_GMLua_cclosure(lua_State* _pL) {
+	int funcIndex = lua_tonumber(_pL, lua_upvalueindex(1));
+	int funcArgc = lua_tonumber(_pL, lua_upvalueindex(2));
+	return DoLuaGMLCall(_pL, funcIndex, funcArgc);
+}
+
 void RegisterFunctions(lua_State* _pL)
 {
 	for (int i = 0; i < *g_RFunctionTableLen; i++)
@@ -545,11 +551,11 @@ void RegisterFunctions(lua_State* _pL)
 		// do the magic.
 		std::string lN("GML_"); // append "GML_" prefix to the function name.
 		lN += rfname;
-		lua_CFunction func = lua_get_RLFunc_by_id(i);
-		if (func != nullptr)
-			lua_register(_pL, lN.c_str(), func);
-		else
-			std::cout << "function " << lN << " " << rf.f_argnumb << " does not exist?" << std::endl;
+
+		lua_pushnumber(_pL, i);
+		lua_pushnumber(_pL, rf.f_argnumb);
+		lua_pushcclosure(_pL, lua_GMLua_cclosure, 2);
+		lua_setglobal(_pL, lN.c_str());
 	}
 
 	// Custom variable management functions.
