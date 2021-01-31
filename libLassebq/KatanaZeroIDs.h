@@ -16,9 +16,11 @@
 #define YYStrDup_Addr          (0x014DB8C0u)
 #define YYAddString_Addr       (0x014DB0F0u)
 #define YYFree_Addr            (0x0151FFA0u)
+#define ARRAY_LVAL_RV_Addr     (0x014DBF50u)
 #define Variable_Addr          (0x01A37CF8u)
 #define GMLScript_Addr         (0x01A3C6F4u)
 #define Run_Room_Addr          (0x01CF88D8u)
+#define Global_YYObject_Addr   (0x01ADE1D8u)
 #define Current_Room_Addr      (0x01CF8900u)
 #define Object_Hash_Addr       (0x01AE769Cu)
 #define GetCtxStackTop_Addr    (0x014D5A80u)
@@ -28,4 +30,19 @@
 #define GMMMSetLength_Addr     (0x015203B0u)
 #define YYSTraceStart_Addr     (0x01AD8B90u)
 #define VarGetValueDirect_Addr (0x014FAE90u)
+#define VarSetValueDirect_Addr (0x014FBA20u)
+#define BuiltinVars_Addr       (0x01ADE300u)
 #define FindRValueSlot_Addr    (0x01525AA0u)
+
+#define Current_Event_Addr     (0x01CF8930u)
+#define Current_Subtype_Addr   (0x01CF8934u)
+
+#define YYError_Addr           (0x014DB040u)
+
+// will remove these later...
+#define ConstNumb_Addr         (0x01D09634u)
+#define ConstNames_Addr        (0x01D0962Cu)
+#define ConstValues_Addr       (0x01D09630u)
+
+// not required.
+#define MenuVersionString_Addr (0x01233C16u)

@@ -7,7 +7,10 @@ FREE_RVal_Pre FREE_RValue__Pre = nullptr;
 YYSetStr YYSetString = nullptr;
 YYCreStr YYCreateString = nullptr;
 YYAddStr YYAddString = nullptr;
+YYStrDupT YYStrDup = nullptr;
 YYFreeT YYFree = nullptr;
+ARRAYLVal ARRAY_LVAL_RValue = nullptr;
+RVariableRoutine* g_BuiltinVars = nullptr;
 
 void RValue::__localFree()
 {
@@ -68,6 +71,13 @@ RValue::~RValue()
 }
 
 RValue::RValue()
+{
+	flags = 0;
+	kind = VALUE_UNSET;
+	v64 = 0L;
+}
+
+RValue::RValue(std::nullptr_t, bool undefined)
 {
 	flags = 0;
 	kind = VALUE_UNDEFINED;
@@ -280,7 +290,7 @@ RValue& RValue::operator++()
 	return *this;
 }
 
-RValue& RValue::operator++(int)
+RValue RValue::operator++(int)
 {
 	RValue tmp(*this);
 	operator++();
@@ -301,7 +311,7 @@ RValue& RValue::operator--()
 	return *this;
 }
 
-RValue& RValue::operator--(int)
+RValue RValue::operator--(int)
 {
 	RValue tmp(*this);
 	operator--();
@@ -357,13 +367,13 @@ bool RValue::operator!=(const RValue& rhs) const
 	return (!(operator==(rhs)));
 }
 
-const RValue& RValue::DoArrayIndex(const int _index) const
+const RValue& RValue::DoArrayIndex(const int _index)
 {
 	const RValue* pV = nullptr;
 	if ((kind & MASK_KIND_RVALUE) == VALUE_ARRAY && (pRefArray != nullptr)) {
 		ldiv_t ind = ldiv(_index, VARIABLE_ARRAY_MAX_DIMENSION);
 		if (pRefArray->pOwner == nullptr) {
-			//abort();
+			pRefArray->pOwner = this;
 		}
 
 		const DynamicArrayOfRValue* pArr = nullptr;
@@ -388,9 +398,14 @@ const RValue& RValue::DoArrayIndex(const int _index) const
 	return *pV;
 }
 
-const RValue& RValue::operator[](const int _index) const
+const RValue& RValue::operator[](const int _index)
 {
 	return DoArrayIndex(_index);
+}
+
+RValue& RValue::operator()(const int _index)
+{
+	return *ARRAY_LVAL_RValue(this, _index);
 }
 
 std::string RValue::asString() const
@@ -413,7 +428,7 @@ std::string RValue::asString() const
 				return "{ <empty array pointer> }";
 			int arrlen = this->pRefArray->pArray->length;
 			if (arrlen <= 0) return "{ <empty array> }";
-
+			/*
 			std::stringstream ss;
 
 			ss << "{ ";
@@ -430,6 +445,8 @@ std::string RValue::asString() const
 			ss << " }";
 
 			return ss.str();
+			*/
+			return nullptr;
 		}
 		case VALUE_BOOL: return (val > 0.5) ? "true" : "false";
 		case VALUE_UNSET: return "<unset>"; // ??????????
@@ -536,6 +553,11 @@ bool RValue::isNumber() const
 	return (mKind == VALUE_REAL || mKind == VALUE_INT32 || mKind == VALUE_INT64 || mKind == VALUE_BOOL);
 }
 
+bool RValue::isUnset() const
+{
+	return kind == VALUE_UNSET;
+}
+
 RValue::operator bool() const
 {
 	return asBoolean();
@@ -556,7 +578,7 @@ RValue::operator double() const
 	return asReal();
 }
 
-RValue::operator std::string() const
+RValue::operator std::string()
 {
 	return asString();
 }

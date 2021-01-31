@@ -1,4 +1,6 @@
 #include "Utils.h"
+#include <time.h>
+#include <stdlib.h>
 
 BOOL ClearConsole()
 {
@@ -62,6 +64,27 @@ void AllocConsoleQuick()
 		_wfreopen_s(&__fDummy, L"CONOUT$", L"w", stdout);
 		//SetConsoleCP(CP_UTF8);
 		SetConsoleOutputCP(CP_UTF8);
-		SetConsoleTitle(TEXT("a cat in need is a cat indeed."));
+		SetConsoleTitle(TEXT("libLassebq Console Window"));
+	}
+}
+
+const char* GetRandomQuote()
+{
+	// initialize the rng
+	unsigned int rndSeed = static_cast<unsigned int>(time(nullptr) & UINT_MAX);
+	srand(rndSeed);
+
+	// lel.
+	int rndValue = rand() % 6;
+	switch (rndValue)
+	{
+		case 0: return "Never fear, the pug is here.";
+		case 1: return "Let's hope Lassebq got his tea.";
+		case 2: return "Stay home and wear a mask.";
+		case 3: return "I am bad at coming up with random quotes, am I?";
+		case 4: return "[unknown] likes cats, even though he says he doesn't.";
+		case 5: return "#FreeAlexeiNavalny"; // let's hope our school teachers won't see this :p
+		// what?
+		default: return "Wtf? You're not supposed to see this quote.";
 	}
 }

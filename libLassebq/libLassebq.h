@@ -12,9 +12,9 @@
 #include <list>
 #include <memory>
 
-#define ItoD(integer) (static_cast<double>((integer)))
-#define EtoI(e) (static_cast<signed int>((e)))
-#define EtoD(e) (static_cast<double>((e)))
+extern int* g_CurrentEvent;
+extern int* g_CurrentSubtype;
+extern int g_GMLScriptsSize;
 
 // Extension func defines.
 #define funcR extern "C" __declspec(dllexport) double       __cdecl 
@@ -79,6 +79,12 @@ public:
 	RValue*		yyvars;
 	virtual ~CInstanceBase() { };
 	virtual RValue& InternalGetYYVarRef(int index) = 0;
+	RValue& GetYYVarRef(int index) {
+		if (yyvars) {
+			return yyvars[index];
+		}
+		return InternalGetYYVarRef(index);
+	} // end GetYYVarRef
 };
 
 typedef void(*GetOwnPropertyFunc)(YYObjectBase* object, RValue* res, char* name);
@@ -115,10 +121,14 @@ public:
 	virtual RValue& InternalGetYYVarRef(int index) = 0;
 };
 
+typedef RValue&(__thiscall *GetYYVarRef)(YYObjectBase* self, int _Index);
 typedef bool(*VarGetValDirect)(YYObjectBase *inst, int var_ind, int array_ind, RValue *res);
+typedef bool(*VarSetValDirect)(YYObjectBase *inst, int var_ind, int array_ind, RValue *val);
 extern VarGetValDirect Variable_GetValue_Direct;
+extern VarSetValDirect Variable_SetValue_Direct;
 typedef int(*FindRValSlot)(YYObjectBase* object, const char* name);
 extern FindRValSlot FindRValueSlot;
+extern YYObjectBase** g_pGlobal;
 
 struct YYRECT
 {
@@ -289,3 +299,7 @@ public:
 #pragma pack(pop)
 
 extern CHash<CObjectGM>** g_ObjectHashTable;
+typedef void(*YYErrorT)(const char* _pFormat, ...);
+extern YYErrorT YYError;
+extern RValue Result;
+void lassebq_callr(std::string id, const RValueList& args);

@@ -26,8 +26,8 @@ struct RFunction
 	char f_name[64];
 	TRoutine f_routine;
 	int f_argnumb;
+	bool f_regonly;
 	unsigned int m_UsageCount;
-	int f_maxargnumb; // always 0xFFFFFFFF
 };
 
 extern YYGMLFunc* g_GMLScripts;

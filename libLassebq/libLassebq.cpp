@@ -5,6 +5,10 @@
 #include "KatanaZero.h"
 #include "KatanaZeroIDs.h"
 #include "Utils.h"
+#include "GMLConstants.h"
+#include "GMLua.h"
+#include "GMLuaAutogen.h"
+#include "GameSpecific.h"
 #include <WinCon.h>
 #include <fstream>
 #include <shellapi.h>
@@ -18,15 +22,24 @@ HMODULE exeBase = nullptr;
 CHash<CObjectGM>** g_ObjectHashTable = nullptr;
 int g_GMLScriptsSize;
 int g_VariablesSize;
+int* g_CurrentEvent = nullptr;
+int* g_CurrentSubtype = nullptr;
 
 VarGetValDirect Variable_GetValue_Direct = nullptr;
+VarSetValDirect Variable_SetValue_Direct = nullptr;
 FindRValSlot FindRValueSlot = nullptr;
 
 std::unordered_map<std::string, int> fR;
 std::unordered_map<std::string, int> fS;
 std::unordered_map<std::string, int> fV;
 
+// <object_index, <event_key, function_pointer>>
+std::unordered_map<int, std::unordered_map<unsigned long long, void*>> EventPatchMap;
+
 RValue Result(0.0);
+
+YYErrorT YYError = nullptr;
+YYObjectBase** g_pGlobal = nullptr;
 
 void lassebq_free_result() {
 	Result.~RValue();
@@ -67,71 +80,43 @@ void lassebq_calls(std::string id, bool isObjectEvent, const RValueList& args = 
 	CallScriptFunction(fS[id], Result, args, isObjectEvent);
 }
 
-void lassebq_Create_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
+void lassebq_doLua(CInstance* _pSelf, CInstance* _pOther, const char* _pLFName) // pointerLuaFunctionName
 {
-	// PLEASE DO NOT FORGET THESE FOUR LINES, THEY ARE ESSENTIAL FOR CALLR/CALLS TO WORK!
-	YY_STACKTRACE_FUNC_ENTRY("libLassebq_Create", 0);
-	YY_STACKTRACE_LINE(1);
-	g_Self = _pSelf; // SET GLOBAL LIBLASSEBQ SELF TO ***OUR*** SELF!!!
-	g_Other = _pOther; // not really required, but still!
-
-	lassebq_callr("window_set_caption", { "Katana ZERO [MODDED]" });
-	std::cout << "Hello from Create Event!" << std::endl;
-}
-
-void lassebq_Step_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
-{
-	// PLEASE DO NOT FORGET THESE FOUR LINES, THEY ARE ESSENTIAL FOR CALLR/CALLS TO WORK!
-	YY_STACKTRACE_FUNC_ENTRY("libLassebq_Step", 0);
-	YY_STACKTRACE_LINE(1);
-	g_Self = _pSelf; // SET GLOBAL LIBLASSEBQ SELF TO ***OUR*** SELF!!!
-	g_Other = _pOther; // not really required, but still!
-}
-
-void lassebq_DrawGUI_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
-{
-	// PLEASE DO NOT FORGET THESE FOUR LINES, THEY ARE ESSENTIAL FOR CALLR/CALLS TO WORK!
-	YY_STACKTRACE_FUNC_ENTRY("libLassebq_DrawGUI", 0);
-	YY_STACKTRACE_LINE(1);
-	g_Self = _pSelf; // SET GLOBAL LIBLASSEBQ SELF TO ***OUR*** SELF!!!
-	g_Other = _pOther; // not really required, but still!
-}
-
-#define quickvarR(_RVV) RValue& _RVV(_pSelf->GetRVRef(fV[#_RVV]))
-#define quickvarB(_RVV) RValue _RVV; lassebq_getvar_direct(#_RVV, _RVV)
-#define varS(_RVV) << #_RVV << " = " << _RVV.asString() << std::endl
-
-void lassebq_playerGUI_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
-{
-	// PLEASE DO NOT FORGET THESE FOUR LINES, THEY ARE ESSENTIAL FOR CALLR/CALLS TO WORK!
-	YY_STACKTRACE_FUNC_ENTRY("libLassebq_Player_DrawGUI", 0);
-	YY_STACKTRACE_LINE(1);
-	g_Self = _pSelf; // SET GLOBAL LIBLASSEBQ SELF TO ***OUR*** SELF!!!
-	g_Other = _pOther; // not really required, but still!
-	
-	// get refs to player vars
-	quickvarB(fps);
-	quickvarB(fps_real);
-	quickvarR(x);
-	x = 999.0;
-
-
-	RValue text("lassebq player debugger:\n");
-	text += "fps = ";
-	text += "\nwhat?";
-
-	lassebq_callr("draw_set_halign", { 0.0 });
-	lassebq_callr("draw_set_valign", { 0.0 });
-	lassebq_callr("draw_set_font", { EtoD(GameFonts::font_songtitle) });
-	lassebq_callr("string_width", { text });
-	double w = Result.asReal();
-	lassebq_callr("string_height", { text });
-	double h = Result.asReal();
-	lassebq_callr("draw_set_color", { 8421376.0 });
-	lassebq_callr("draw_set_alpha", { 0.9 });
-	lassebq_callr("draw_rectangle_color", { 64.0 - 2.0, 64.0 - 2.0, 64.0 + w + 2.0, 64.0 + h + 2.0, 0.0, 0.0, 0.0, 0.0, 0.0 });
-	lassebq_callr("draw_set_alpha", { 1.0 });
-	lassebq_callr("draw_text", { 64.0, 64.0, text });
+	int r = LUA_OK; const char* errmsg = nullptr;
+	for (const std::string& script : Lscripts)
+	{
+		r = luaL_dofile(lS, script.c_str());
+		if (r == LUA_OK)
+		{
+			lua_getglobal(lS, _pLFName);
+			if (lua_isfunction(lS, -1)) // if the function exists...
+			{
+				// push pSelf/pOther as arguments to the function call...
+				lua_pushlightuserdata(lS, _pSelf);
+				lua_pushlightuserdata(lS, _pOther);
+				// do the luacall
+				r = lua_pcall(lS, 2, 0, 0);
+				if (r != LUA_OK)
+				{
+					errmsg = lua_tostring(lS, -1);
+					if (g_ThrowErrors)
+					{
+						YYError("Lua Error: lua_pcall failed with result %d in function %s.\r\nDetails:\r\n%s\r\n", r, _pLFName, errmsg);
+					}
+					lua_pop(lS, 1);
+				}
+			}
+		}
+		else
+		{
+			errmsg = lua_tostring(lS, -1);
+			if (g_ThrowErrors)
+			{
+				YYError("Lua Error: luaL_dofile failed with result %d in function %s.\r\nDetails:\r\n%s\r\n", r, _pLFName, errmsg);
+			}
+			lua_pop(lS, 1);
+		}
+	}
 }
 
 typedef CEvent*(__thiscall *GetEvRecurs)(CObjectGM* self, int etype, int esubtype);
@@ -139,16 +124,110 @@ typedef void(__thiscall *InsertEv)(CHashMap<unsigned long long, CEvent*, 3> *sel
 GetEvRecurs GetEventRecursive = nullptr;
 InsertEv InsertEvent = nullptr;
 
+unsigned long long lassebq_evKey(int etype, int esubtype)
+{
+	return static_cast<unsigned long long>(static_cast<long long>(esubtype) | (static_cast<long long>(etype) << 0x20ll));
+}
+
+void lassebq_lua_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
+{
+	g_Self = _pSelf;
+	g_Other = _pOther;
+	CEvent* ev = GetEventRecursive(_pSelf->m_pObject, *g_CurrentEvent, *g_CurrentSubtype);
+	YY_STACKTRACE_FUNC_ENTRY(ev->e_code->i_pName, 0);
+
+	char luaFuncName[256]{ '\0' };
+	// "objectname_eventname"
+	snprintf(luaFuncName, sizeof(luaFuncName), "%s_%s",
+		_pSelf->m_pObject->m_pName,
+		mapOfEvents[lassebq_evKey(*g_CurrentEvent, *g_CurrentSubtype)].c_str()
+	);
+
+	YY_STACKTRACE_LINE(1);
+	lassebq_doLua(_pSelf, _pOther, luaFuncName);
+}
+
+void lassebq_antiSpeedrunCheat_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
+{
+	g_Self = _pSelf;
+	g_Other = _pOther;
+
+	YY_STACKTRACE_FUNC_ENTRY("libLassebq_antiSpeedrunCheat_DrawGUIEnd", 0);
+	lassebq_callr("get_timer");
+	lassebq_callr("sin", { Result.asReal()/100000.0 });
+	double time = Result.asReal();
+	double k = time * 2.0;
+	double m = 4.0; // margin
+	double x = 128.0 + k;
+	double y = 128.0 + k;
+	const char* str = "libLassebq is active,\nthe speedrun may be fake!";
+	lassebq_callr("draw_set_font", { EtoD(GameFonts::font_folderbold) });
+
+	YY_STACKTRACE_LINE(1);
+	lassebq_callr("string_width", { str });
+	double sw = Result.asReal();
+	lassebq_callr("string_height", { str });
+	double sh = Result.asReal();
+	double x2 = x + sw + m;
+	double y2 = y + sh + m;
+
+	YY_STACKTRACE_LINE(2);
+	lassebq_callr("draw_get_alpha");
+	double oldAlpha = Result.asReal();
+	lassebq_callr("draw_get_halign");
+	double oldH = Result.asReal();
+	lassebq_callr("draw_get_valign");
+	double oldV = Result.asReal();
+	YY_STACKTRACE_LINE(3);
+	lassebq_callr("draw_set_alpha", { 0.5 });
+	lassebq_callr("draw_set_halign", { fa_left });
+	lassebq_callr("draw_set_valign", { fa_top });
+	YY_STACKTRACE_LINE(4);
+	lassebq_callr("draw_rectangle_color", { x - m, y - m, x2, y2, c_black, c_black, c_black, c_black, false });
+	lassebq_callr("draw_text_color", { x, y, str, c_red, c_red, c_red, c_red, 1.0 });
+	YY_STACKTRACE_LINE(5);
+	lassebq_callr("draw_set_alpha", { oldAlpha });
+	lassebq_callr("draw_set_halign", { oldH });
+	lassebq_callr("draw_set_valign", { oldV });
+	YY_STACKTRACE_LINE(6);
+}
+
+void lassebq_luaPatch_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
+{
+	g_Self = _pSelf;
+	g_Other = _pOther;
+
+	// Execute the original event.
+	unsigned long long evKey = lassebq_evKey(*g_CurrentEvent, *g_CurrentSubtype);
+	GML_ObjectEvent origptr = reinterpret_cast<GML_ObjectEvent>
+		(EventPatchMap[_pSelf->m_pObject->m_ID][evKey]);
+	origptr(_pSelf, _pOther);
+
+	// Execute the lua function.
+	CEvent* ev = GetEventRecursive(_pSelf->m_pObject, *g_CurrentEvent, *g_CurrentSubtype);
+	// Why? When the original event returns, it will call Stacktrace's destructor, thus null-ing it
+	// So we need to make a new instance of the stacktrace :/
+	YY_STACKTRACE_FUNC_ENTRY(ev->e_code->i_pName, 0);
+	char luaFuncName[256]{ '\0' };
+	// "objectname_eventname"
+	snprintf(luaFuncName, sizeof(luaFuncName), "%s_%s",
+		_pSelf->m_pObject->m_pName,
+		mapOfEvents[evKey].c_str()
+	);
+	YY_STACKTRACE_LINE(1);
+	lassebq_doLua(_pSelf, _pOther, luaFuncName);
+}
+
 CObjectGM *lassebq_find_obj(int obj_index)
 {
 	HashNode<CObjectGM> *oNode = (*g_ObjectHashTable)->m_pHashingTable[(*g_ObjectHashTable)->m_HashingMask & obj_index].m_pFirst;
 	for (;;) {
 		if (oNode == nullptr) // eh? doesn't exist?
-			abort();
+			return nullptr;
 		if (oNode->m_ID == obj_index) break; // found it in O(1) yay
 		oNode = oNode->m_pNext; // eh? can't find it in O(1)???
 	}
-	if (oNode == nullptr) abort(); // eh? wtf? shouldn't happen?
+	if (oNode == nullptr) return nullptr; // eh? wtf? shouldn't happen?
 
 	return oNode->m_pObj;
 }
@@ -157,13 +236,13 @@ CCode* lassebq_fake_CCode(GML_ObjectEvent evFunc, const char* evName)
 {
 	CCode* code = new CCode();
 	code->i_kind = 1;
-	code->i_str = "";
+	code->i_str = nullptr;
 	code->i_value = 0.0;
 	code->i_pVM = nullptr;
 	code->i_pVMDebugInfo = nullptr;
 	code->i_compiled = true;
-	code->i_pCode = "";
-	code->i_pName = const_cast<char*>(evName);
+	code->i_pCode = nullptr;
+	code->i_pName = YYStrDup(evName);
 	code->i_CodeIndex = 0;
 	code->i_pFunc = new YYGMLFunc();
 	code->i_pFunc->pName = code->i_pName;
@@ -184,9 +263,11 @@ CEvent* lassebq_fake_CEvent(int oIndex, CCode* ptr)
 	return evt;
 }
 
-unsigned long long lassebq_evKey(int etype, int esubtype)
+void lassebq_addEventAlt(CObjectGM* gmObj, unsigned long long key, const char* name, GML_ObjectEvent evt)
 {
-	return static_cast<unsigned long long>(static_cast<long long>(esubtype) | (static_cast<long long>(etype) << 0x20ll));
+	CCode* code = lassebq_fake_CCode(evt, name);
+	CEvent* ev = lassebq_fake_CEvent(gmObj->m_ID, code);
+	InsertEvent(gmObj->m_eventsMap, key, ev);
 }
 
 void lassebq_addEvent(CObjectGM* gmObj, int etype, int esubtype, const char* name, GML_ObjectEvent evt)
@@ -201,13 +282,53 @@ void lassebq_patchObject(CObjectGM* gmObj)
 {
 	std::cout << "Trying to patch lassebq obj..." << std::endl;
 
-	lassebq_addEvent(gmObj, 0, 0, "libLassebq_Create", lassebq_Create_GMLRoutine);
-	lassebq_addEvent(gmObj, 3, 0, "libLassebq_Step", lassebq_Step_GMLRoutine);
-	lassebq_addEvent(gmObj, 8, 64, "libLassebq_DrawGUI", lassebq_DrawGUI_GMLRoutine);
+	int r;
+	char buf[256]{ '\0' };
+	for (const std::string& fn : Lscripts)
+	{
+		r = luaL_dofile(lS, fn.c_str());
+		if (r == LUA_OK)
+		{
+			for (int i = 0; true; i++)
+			{
+				if (i == EtoI(GameObjects::obj_speedrun_results_screen))
+				{
+					continue; // ignore any event replaces for obj_speedrun_results_screen.
+				}
 
-	std::cout << "Trying to patch obj_player..." << std::endl;
-	CObjectGM* obj_player = lassebq_find_obj(EtoI(GameObjects::obj_player));
-	lassebq_addEvent(obj_player, 8, 64, "libLassebq_Player_DrawGUI", lassebq_playerGUI_GMLRoutine);
+				CObjectGM* cogm = lassebq_find_obj(i);
+				if (cogm == nullptr) break;
+				const char* str = cogm->m_pName;
+
+				for(const std::pair<unsigned long long, std::string>& pair : mapOfEvents)
+				{
+					memset(buf, 0, sizeof(buf));
+					snprintf(buf, sizeof(buf), "%s_%s", str, pair.second.c_str());
+					lua_getglobal(lS, buf);
+					if (lua_isfunction(lS, -1))
+					{
+						CObjectGM* cogm = lassebq_find_obj(i);
+						int type = static_cast<int>(pair.first >> 32ull);
+						int subtype = static_cast<int>(pair.first & 0xFFFFFFFFull);
+						CEvent* origev = GetEventRecursive(cogm, type, subtype);
+						if (origev != nullptr)
+						{
+							std::cout << "AN EVENT " << pair.second << " ALREADY EXISTS! brb replacing..." << std::endl;
+							EventPatchMap[i][pair.first] = origev->e_code->i_pFunc->ptr; // save the original function.
+							origev->e_code->i_pFunc->ptr = lassebq_luaPatch_GMLRoutine;
+							continue;
+						}
+
+						memset(buf, 0, sizeof(buf));
+						snprintf(buf, sizeof(buf), "libLassebq_%s_%s", str, pair.second.c_str());
+						std::cout << "Adding event " << buf << "..." << std::endl;
+						lassebq_addEvent(cogm, type, subtype, buf, lassebq_lua_GMLRoutine);
+					}
+					lua_pop(lS, 1);
+				}
+			}
+		}
+	}
 
 	std::cout << "Done! Did it work? :)" << std::endl;
 }
@@ -217,18 +338,24 @@ CObjectGM* lassebq_make_obj_liblassebq()
 	//lassebq_dbg();
 	lassebq_callr("object_add");
 	int obj_index = Result.asInt32();
-	std::cout << "LibLassebq object index " << obj_index << std::endl;
+	std::cout << "libLassebq object index " << obj_index << std::endl;
 
 	// find our object.
 	CObjectGM *oNode = lassebq_find_obj(obj_index);
+	YYFree(oNode->m_pName);
+	oNode->m_pName = YYStrDup("obj_libLassebq");
 	
 	// mark as persistent.
-	lassebq_callr("object_set_persistent", { obj_index, 1.0 });
+	lassebq_callr("object_set_persistent", { obj_index, true });
 
 	// Since Run_Room is NULL, we're not actually in any room just yet
 	// WHICH MEANS, WE CAN DO THIS:
 	lassebq_callr("room_instance_add", { EtoD(GameRooms::room_init), 0.0, 0.0, obj_index });
 	// room_instance_add our object at position 0;0
+
+	// do not modify or remove these two lines.
+	CObjectGM* speedrun_thing = lassebq_find_obj(EtoI(GameObjects::obj_speedrun_results_screen));
+	lassebq_addEvent(speedrun_thing, static_cast<int>(ev_draw), static_cast<int>(ev_gui_end), "libLassebq_antiSpeedrunCheat_DrawGUIEnd", lassebq_antiSpeedrunCheat_GMLRoutine);
 
 	return oNode; // return our object so we can patch events :D
 }
@@ -236,6 +363,10 @@ CObjectGM* lassebq_make_obj_liblassebq()
 void lassebq_initYYC()
 {
 	AllocConsoleQuick();
+	std::cout << "libLassebq by nkrapivindev, built for project " << PROJECT_NAME << std::endl;
+	std::cout << "This thing is experimental, please report any bugs to nik#5351 on Discord." << std::endl;
+	std::cout << "Random quote: " << GetRandomQuote() << std::endl;
+	std::cout << std::endl;
 
 	exeBase = GetModuleHandleW(nullptr);
 	uintptr_t exeAsUint = reinterpret_cast<uintptr_t>(exeBase);
@@ -269,19 +400,34 @@ void lassebq_initYYC()
 	g_RFunctionTable = reinterpret_cast<RFunction**>(exeAsUint + RFunctionTable_Addr);
 	g_ObjectHashTable = reinterpret_cast<CHash<CObjectGM>**>(exeAsUint + Object_Hash_Addr);
 	FREE_RValue__Pre = reinterpret_cast<FREE_RVal_Pre>(exeAsUint + FREE_RValue__Pre_Addr);
+	ARRAY_LVAL_RValue = reinterpret_cast<ARRAYLVal>(exeAsUint + ARRAY_LVAL_RV_Addr);
 	YYSetString = reinterpret_cast<YYSetStr>(exeAsUint + YYSetString_Addr);
 	YYCreateString = reinterpret_cast<YYCreStr>(exeAsUint + YYCreateString_Addr);
 	YYAddString = reinterpret_cast<YYAddStr>(exeAsUint + YYAddString_Addr);
+	YYStrDup = reinterpret_cast<YYStrDupT>(exeAsUint + YYStrDup_Addr);
 	YYFree = reinterpret_cast<YYFreeT>(exeAsUint + YYFree_Addr);
 	g_Self = nullptr;
 	SYYStackTrace::s_pStart = reinterpret_cast<SYYStackTrace**>(exeAsUint + YYSTraceStart_Addr);
+
+	g_CurrentEvent = reinterpret_cast<int*>(exeAsUint + Current_Event_Addr);
+	g_CurrentSubtype = reinterpret_cast<int*>(exeAsUint + Current_Subtype_Addr);
+
+	// remove this later
+	g_ConstNames = reinterpret_cast<const char***>(exeAsUint + ConstNames_Addr);
+	g_ConstNumb = reinterpret_cast<const int*>(exeAsUint + ConstNumb_Addr);
+	g_ConstValues = reinterpret_cast<const RValue**>(exeAsUint + ConstValues_Addr);
+	// remove this later
+
+	YYError = reinterpret_cast<YYErrorT>(exeAsUint + YYError_Addr);
 
 	GetContextStackTop = reinterpret_cast<GetCtxStackTop>(exeAsUint + GetCtxStackTop_Addr);
 	DeterminePotentialRoot = reinterpret_cast<DetPotRoot>(exeAsUint + DeterminePotRoot_Addr);
 	GetEventRecursive = reinterpret_cast<GetEvRecurs>(exeAsUint + GetEvRecursive_Addr);
 	InsertEvent = reinterpret_cast<InsertEv>(exeAsUint + InsertEvent_Addr);
 	Variable_GetValue_Direct = reinterpret_cast<VarGetValDirect>(exeAsUint + VarGetValueDirect_Addr);
+	Variable_SetValue_Direct = reinterpret_cast<VarSetValDirect>(exeAsUint + VarSetValueDirect_Addr);
 	FindRValueSlot = reinterpret_cast<FindRValSlot>(exeAsUint + FindRValueSlot_Addr);
+	g_BuiltinVars = reinterpret_cast<RVariableRoutine*>(exeAsUint + BuiltinVars_Addr);
 
 	for (int i = 0; i < *g_RFunctionTableLen; i++)
 	{
@@ -289,12 +435,39 @@ void lassebq_initYYC()
 		fR[RFunc->f_name] = i;
 	}
 
+	g_pGlobal = reinterpret_cast<YYObjectBase**>(exeAsUint + Global_YYObject_Addr);
+
+	//WaitForDebugger();
+	// I'd print authors and copyright before doing any lua stuff
+	std::cout << std::endl;
+	std::cout << LUA_COPYRIGHT << std::endl;
+	std::cout << LUA_AUTHORS << std::endl;
+	std::cout << std::endl;
+
+	// and now, the fun stuff.
+	std::cout << "Initializing GMLua..." << std::endl;
+	InitGMLuaConfig();
+	InitGMLuaScripts();
+	InitLua();
 	lassebq_patchObject(lassebq_make_obj_liblassebq());
+
+	// very cursed.
+	std::cout << "Applying " << PROJECT_NAME << " specific patches..." << std::endl;
+	ApplyGameSpecificPatches(exeAsUint);
+
+	std::cout << "All Done, proceeding to the game..." << std::endl;
+	std::cout << std::endl;
+
+	// oh, at long last, switch to our game window instead of the console window :/
+	lassebq_callr("window_handle");
+	HWND hGMWindow = reinterpret_cast<HWND>(Result.asPointer());
+	SetActiveWindow(hGMWindow);
+	SetForegroundWindow(hGMWindow);
 }
 
 void lassebq_print_global_rvars(std::ostream& oS)
 {
-	lassebq_callr("variable_instance_get_names", { -5.0 });
+	lassebq_callr("variable_instance_get_names", { global });
 	RValue arr(Result);
 
 	oS << "-------------------------------" << std::endl;
@@ -308,7 +481,7 @@ void lassebq_print_global_rvars(std::ostream& oS)
 
 		for (int i = 0; i < arrlen; i++)
 		{
-			const std::string varName = arr[i].asString();
+			std::string varName = arr[i].asString();
 			oS << varName << " = ";
 			lassebq_callr("variable_global_get", { varName });
 			oS << Result.asString() << std::endl;
@@ -350,7 +523,7 @@ void lassebq_print_instance_rvars(int instid, std::ostream& oS)
 
 		for (int i = 0; i < arrlen; i++)
 		{
-			const std::string varName = arr[i].asString();
+			std::string varName = arr[i].asString();
 			oS << varName << " = ";
 			lassebq_callr("variable_instance_get", { instid, varName });
 			oS << Result.asString() << std::endl;
@@ -466,301 +639,6 @@ LPSTR lassebq_WtoM(const std::wstring& wstr) {
 	return str;
 }
 
-DWORD WINAPI lassebq_cli(LPVOID lpThreadParameter)
-{
-	std::cout << "CLI Thread is working..." << std::endl;
-	std::cout << "Base address: " << exeBase << std::endl;
-	std::cout << "Variables: " << g_VariablesSize << std::endl;
-	std::cout << "Scripts: " << g_GMLScriptsSize << std::endl;
-	std::cout << std::endl;
-	std::cout << "CreateDsMap: " << ds_map_create << std::endl;
-	std::cout << "DsMapAddDouble: " << ds_map_add_real << std::endl;
-	std::cout << "DsMapAddString: " << ds_map_add_string << std::endl;
-	std::cout << "CreateAsyncEvent: " << create_async_event << std::endl;
-	std::cout << std::endl;
-	std::cout << "Init done, type funny commands, get funny responses (or Access Violations)..." << std::endl;
-
-	std::string cmd;
-	std::wstring fname(L"out.log");
-	bool useStdcout = true;
-
-	for (;;)
-	{
-		std::cout << PROMPT;
-		std::getline(std::cin, cmd);
-		if (cmd.length() == 0 || cmd.at(0) == ' ') continue;
-
-		// convert UTF_8 string to wide.
-		int bufSize = MultiByteToWideChar(GetConsoleCP(), MB_PRECOMPOSED, cmd.c_str(), -1, nullptr, 0);
-		LPWSTR buf = new WCHAR[bufSize];
-		MultiByteToWideChar(GetConsoleCP(), MB_PRECOMPOSED, cmd.c_str(), -1, buf, bufSize);
-
-		// parse the arguments and convert them into a vector of arguments.
-		int cmd_argc = 0;
-		LPWSTR* winapi_argv = CommandLineToArgvW(buf, &cmd_argc);
-		std::vector<std::wstring> cmd_argv;
-		for (int i = 0; i < cmd_argc; i++)
-		{
-			cmd_argv.push_back(winapi_argv[i]);
-		}
-
-		// free the winapi stuff.
-		LocalFree(winapi_argv);
-		winapi_argv = nullptr;
-		delete[] buf;
-		buf = nullptr;
-		bufSize = 0;
-
-		// finally.
-		if (cmd_argv[0] == L"list-instances")
-		{
-			if (useStdcout)
-				lassebq_print_instances(std::cout);
-			else
-			{
-				std::ofstream fS(fname, std::ofstream::out | std::ofstream::app);
-				lassebq_print_instances(fS);
-				fS.close();
-			}
-		}
-		else if (cmd_argv[0] == L"set-cout-mode")
-		{
-			if (cmd_argv.size() <= 1)
-			{
-				useStdcout = true;
-				std::cout << "Output mode: console" << std::endl;
-			}
-			else
-			{
-				useStdcout = false;
-				fname = cmd_argv[1];
-				std::cout << "Output mode: file" << std::endl;
-			}
-		}
-		else if (cmd_argv[0] == L"list-global-vars")
-		{
-			if (useStdcout)
-				lassebq_print_global_rvars(std::cout);
-			else
-			{
-				std::ofstream fS(fname, std::ofstream::out | std::ofstream::app);
-				lassebq_print_global_rvars(fS);
-				fS.close();
-			}
-		}
-		else if (cmd_argv[0] == L"list-instance-vars")
-		{
-			if (cmd_argv.size() < 2)
-			{
-				lassebq_wrong_args();
-				continue;
-			}
-
-			try {
-				int instid = std::stoi(cmd_argv[1]);
-				if (useStdcout)
-					lassebq_print_instance_vars(instid, std::cout);
-				else
-				{
-					std::ofstream fS(fname, std::ofstream::out | std::ofstream::app);
-					lassebq_print_instance_vars(instid, fS);
-					fS.close();
-				}
-			}
-			catch (std::exception&) {
-				lassebq_wrong_args();
-			}
-		}
-		else if (cmd_argv[0] == L"list-instance-rvars")
-		{
-			if (cmd_argv.size() < 2)
-			{
-				lassebq_wrong_args();
-				continue;
-			}
-
-			try {
-				int instid = std::stoi(cmd_argv[1]);
-				// VERY SLOW!
-				if (useStdcout)
-					lassebq_print_instance_rvars(instid, std::cout);
-				else
-				{
-					std::ofstream fS(fname, std::ofstream::out | std::ofstream::app);
-					lassebq_print_instance_rvars(instid, fS);
-					fS.close();
-				}
-			}
-			catch (std::exception&) {
-				lassebq_wrong_args();
-			}
-		}
-		else if (cmd_argv[0] == L"calls")
-		{
-			if (cmd_argv.size() < 2)
-			{
-				lassebq_wrong_args();
-				continue;
-			}
-
-			try {
-				LPSTR fName = lassebq_WtoM(cmd_argv[1]);
-
-				// prepare arguments.
-				RValueList args;
-
-				for (size_t i = 2; i < cmd_argv.size(); i++) {
-					if (cmd_argv[i].at(0) == L'@') {
-						std::wstring noAt = cmd_argv[i].substr(1);
-						double vv = std::stod(noAt);
-						args.push_back(vv);
-					}
-					else {
-						args.push_back(cmd_argv[i]);
-					}
-				}
-				
-				// do the call
-				lassebq_calls(fName, false, args);
-				delete[] fName;
-
-				std::cout << "Return value: " << Result.asString() << std::endl;
-			}
-			catch (const std::exception&) {
-				lassebq_wrong_args();
-			}
-		}
-		else if (cmd_argv[0] == L"callr")
-		{
-			if (cmd_argv.size() < 2)
-			{
-				lassebq_wrong_args();
-				continue;
-			}
-
-			try {
-				LPSTR fName = lassebq_WtoM(cmd_argv[1]);
-
-				// prepare arguments.
-				RValueList args;
-
-				for (size_t i = 2; i < cmd_argv.size(); i++) {
-					if (cmd_argv[i].at(0) == L'@') {
-						std::wstring noAt = cmd_argv[i].substr(1);
-						double vv = std::stod(noAt);
-						args.push_back(vv);
-					}
-					else {
-						args.push_back(cmd_argv[i]);
-					}
-				}
-
-				// do the call
-				lassebq_callr(fName, args);
-				delete[] fName;
-
-				std::cout << "Return value: " << Result.asString() << std::endl;
-			}
-			catch (const std::exception&) {
-				lassebq_wrong_args();
-			}
-		}
-		else if (cmd_argv[0] == L"callo")
-		{
-			if (cmd_argv.size() < 2)
-			{
-				lassebq_wrong_args();
-				continue;
-			}
-
-			try {
-				LPSTR fName = lassebq_WtoM(cmd_argv[1]);
-
-				// do the call
-				lassebq_calls(fName, true);
-				delete[] fName;
-
-				std::cout << "Called!" << std::endl;
-			}
-			catch (const std::exception&) {
-				lassebq_wrong_args();
-			}
-		}
-		else if (cmd_argv[0] == L"set-var")
-		{
-			if (cmd_argv.size() < 4)
-			{
-				lassebq_wrong_args();
-				continue;
-			}
-
-			try {
-				int instid = std::stoi(cmd_argv[1]);
-				RValueList args;
-				args.emplace_back(instid);
-				args.emplace_back(cmd_argv[2]);
-
-				if (cmd_argv[3].at(0) == L'@')
-				{
-					std::wstring noAt = cmd_argv[3].substr(1);
-					double vv = std::stod(noAt);
-					args.emplace_back(vv);
-				}
-				else
-				{
-					args.emplace_back(cmd_argv[3]);
-				}
-
-				lassebq_callr("variable_instance_set", args);
-
-				std::cout << "Set!" << std::endl;
-			}
-			catch (const std::exception& exc) {
-				std::cout << exc.what() << std::endl;
-				lassebq_wrong_args();
-			}
-		}
-		else if (cmd_argv[0] == L"set-global-var")
-		{
-			if (cmd_argv.size() < 3)
-			{
-				lassebq_wrong_args();
-				continue;
-			}
-
-			try {
-				RValueList args;
-				args.emplace_back(cmd_argv[1]);
-
-				if (cmd_argv[2].at(0) == L'@')
-				{
-					std::wstring noAt = cmd_argv[2].substr(1);
-					double vv = std::stod(noAt);
-					args.emplace_back(vv);
-				}
-				else
-				{
-					args.emplace_back(cmd_argv[2]);
-				}
-
-				lassebq_callr("variable_global_set", args);
-
-				std::cout << "Set!" << std::endl;
-			}
-			catch (const std::exception& exc) {
-				std::cout << exc.what() << std::endl;
-				lassebq_wrong_args();
-			}
-		}
-		else if (cmd_argv[0] == L"cls")
-		{
-			ClearConsole();
-		}
-	}
-
-	return 0;
-}
-
 funcR lassebq_init()
 {
 	return 1.0;
@@ -781,8 +659,4 @@ funcV RegisterCallbacks(GML_create_async_event cae, GML_ds_map_create dmc, GML_d
 
 	// do the job.
 	lassebq_initYYC();
-
-	// we need a *large* stack (around 2-4 megs) because of GML arg stack stuff...
-	DWORD threadId;
-	CreateThread(nullptr, 0x00400000, lassebq_cli, nullptr, 0, &threadId);
 }

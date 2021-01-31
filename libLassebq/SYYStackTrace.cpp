@@ -1,6 +1,6 @@
 #include "SYYStackTrace.h"
 
-SYYStackTrace** SYYStackTrace::s_pStart = nullptr;
+SYYStackTrace** SYYStackTrace::s_pStart = nullptr; // will be set to an address that points to s_pStart in lassebq_initYYC()
 
 SYYStackTrace::SYYStackTrace(const char* _pName, int _line)
 {

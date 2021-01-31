@@ -51,12 +51,16 @@ typedef void(*YYSetStr)(RValue* _pVal, const char* _pS);
 typedef void(*YYCreStr)(RValue* _pVal, const char* _pS);
 typedef char*(*YYAddStr)(const char* _first, const char* _second);
 typedef char*(*YYDupStr)(const char* _pStr);
+typedef char*(*YYStrDupT)(const char* _pS);
 typedef void(*YYFreeT)(void* _pMemory);
+typedef RValue*(*ARRAYLVal)(RValue* _pV, int _index);
 extern YYSetStr YYSetString;
 extern YYCreStr YYCreateString;
 extern YYAddStr YYAddString;
+extern YYStrDupT YYStrDup;
 extern YYFreeT YYFree;
 extern FREE_RVal_Pre FREE_RValue__Pre;
+extern ARRAYLVal ARRAY_LVAL_RValue;
 
 template <typename T> struct _RefThing
 {
@@ -108,7 +112,6 @@ struct RefDynamicArrayOfRValue
 #pragma pack(push, 4)
 struct RValue
 {
-private:
 	union {
 		// values.
 		int v32;
@@ -129,7 +132,6 @@ private:
 	void __localFree(void);
 	void __localCopy(const RValue& v);
 
-public:
 	~RValue();
 
 	RValue();
@@ -141,6 +143,7 @@ public:
 	RValue(long long v);
 	RValue(bool v);
 	RValue(std::nullptr_t v);
+	RValue(std::nullptr_t, bool undefined);
 	RValue(void* v);
 	RValue(const char* v);
 	RValue(std::string v);
@@ -161,18 +164,19 @@ public:
 	RValue& operator=(std::wstring v);
 
 	RValue& operator++();
-	RValue& operator++(int);
+	RValue  operator++(int);
 
 	RValue& operator--();
-	RValue& operator--(int);
+	RValue  operator--(int);
 
 	RValue& operator+=(const char* v);
 
 	bool operator==(const RValue& rhs) const;
 	bool operator!=(const RValue& rhs) const;
 
-	const RValue& DoArrayIndex(const int _index) const;
-	const RValue& operator[](const int _index) const;
+	const RValue& DoArrayIndex(const int _index);
+	const RValue& operator[](const int _index);
+	RValue& operator()(const int _index);
 
 	std::string asString() const;
 	double asReal() const;
@@ -182,13 +186,28 @@ public:
 	void* asPointer() const;
 	const DynamicArrayOfRValue* asArray() const;
 	bool isNumber() const;
+	bool isUnset() const;
 
 	operator double() const;
 	operator int() const;
 	operator long long() const;
 	operator bool() const;
-	operator std::string() const;
+	operator std::string();
 	operator void*() const;
 	//operator const DynamicArrayOfRValue*() const;
 };
+
+class CInstanceBase;
+typedef bool(*TGetVarRoutine)(CInstanceBase* obj, int array_index, RValue* res);
+typedef bool(*TSetVarRoutine)(CInstanceBase* obj, int array_index, RValue* val);
+struct RVariableRoutine
+{
+	char* f_name;
+	TGetVarRoutine f_getroutine;
+	TSetVarRoutine f_setroutine;
+	bool f_canset;
+};
+
+extern RVariableRoutine* g_BuiltinVars;
+
 #pragma pack(pop)

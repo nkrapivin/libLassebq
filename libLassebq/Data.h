@@ -1,4 +1,14 @@
 #pragma once
+#include <unordered_map>
+#include "GMLConstants.h"
+#define MAKE_EV_KEY(_Type, _Subtype) (_Subtype##ull | _Type##ull << 0x20ull)
+
+constexpr unsigned long long makeevkey(unsigned long long type, unsigned long long subtype)
+{
+	return (subtype | type << 0x20ull);
+}
+
+extern std::unordered_map<unsigned long long, std::string> mapOfEvents;
 
 enum eDeleteType : int
 {
