@@ -75,7 +75,7 @@ const char* GetRandomQuote()
 	srand(rndSeed);
 
 	// lel.
-	int rndValue = rand() % 6;
+	int rndValue = rand() % 7;
 	switch (rndValue)
 	{
 		case 0: return "Never fear, the pug is here.";
@@ -84,6 +84,7 @@ const char* GetRandomQuote()
 		case 3: return "I am bad at coming up with random quotes, am I?";
 		case 4: return "[unknown] likes cats, even though he says he doesn't.";
 		case 5: return "#FreeAlexeiNavalny"; // let's hope our school teachers won't see this :p
+		case 6: return "Here comes the videogame";
 		// what?
 		default: return "Wtf? You're not supposed to see this quote.";
 	}
