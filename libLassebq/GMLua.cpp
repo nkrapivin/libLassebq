@@ -579,9 +579,10 @@ void RegisterScripts(lua_State* _pL)
 	{
 		const YYGMLFunc& func = g_GMLScripts[i];
 		const std::string fname(func.pName);
-		if (fname.rfind("gml_Script_") != std::string::npos)
+		const std::string prefix("gml_Script_");
+		if (fname.rfind(prefix) != std::string::npos)
 		{
-			const std::string luaName("GMLScript_" + fname);
+			const std::string luaName("GMLScript_" + fname.substr(prefix.length()));
 			lua_pushinteger(_pL, i);
 			lua_pushcclosure(_pL, lua_GMLua_script_cclosure, 1);
 			lua_setglobal(_pL, luaName.c_str());
