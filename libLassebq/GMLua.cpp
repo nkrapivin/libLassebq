@@ -1,13 +1,13 @@
 #include "GMLua.h"
 #include "KatanaZero.h"
-#include "GMLuaAutogenScript.h"
 #include "Utils.h"
 
 #define THROW(x) throw std::runtime_error((x))
 std::vector<std::string> Lscripts{ };
 lua_State* lS = nullptr;
-bool addCollisionEvents = false;
+bool g_AddCollisionEvents = false;
 bool g_ThrowErrors = true;
+bool g_NoConsole = false;
 
 bool isInvalidConstant(const char* n)
 {
@@ -118,7 +118,7 @@ void RegisterAssets(lua_State* _pL)
 		ASSET_PUSH();
 
 		// Add collision events to the map.
-		if (addCollisionEvents)
+		if (g_AddCollisionEvents)
 		{
 			mapOfEvents[makeevkey(static_cast<unsigned long long>(ev_collision), i)] = "Collision_" + Result.asString();
 		}
@@ -154,24 +154,26 @@ void InitGMLuaConfig(void)
 	std::string line;
 	while (std::getline(cfg, line))
 	{
-		if (line == "addCollisionEvents")
+		if (line == "noConsole")
 		{
-			std::cout << "Collision event name generation enabled, loading times will be WAY slower." << std::endl;
-			addCollisionEvents = true;
+			g_NoConsole = true;
+		}
+		else if (line == "addCollisionEvents")
+		{
+			g_AddCollisionEvents = true;
 		}
 		else if (line == "ignoreLuaErrors")
 		{
-			std::cout << "Will ignore Lua errors, this is VERY evil and unstable!" << std::endl;
 			g_ThrowErrors = false;
 		}
 		else if (line == "waitForDebugger")
 		{
-			std::cout << "Will wait for debugger in " << __FUNCTION__ << std::endl;
 			wait = true;
 		}
 	}
 	cfg.close();
 
+	// wait after we load the config.
 	if (wait) WaitForDebugger();
 }
 
@@ -531,9 +533,14 @@ int lua_GMLua_instToPtr(lua_State* _pL)
 }
 
 int lua_GMLua_cclosure(lua_State* _pL) {
-	int funcIndex = lua_tonumber(_pL, lua_upvalueindex(1));
-	int funcArgc = lua_tonumber(_pL, lua_upvalueindex(2));
-	return DoLuaGMLCall(_pL, funcIndex, funcArgc);
+	lua_Integer funcIndex = lua_tointeger(_pL, lua_upvalueindex(1));
+	lua_Integer funcArgc = lua_tointeger(_pL, lua_upvalueindex(2));
+	return DoLuaGMLCall(_pL, static_cast<int>(funcIndex), static_cast<int>(funcArgc));
+}
+
+int lua_GMLua_script_cclosure(lua_State* _pL) {
+	lua_Integer funcIndex = lua_tointeger(_pL, lua_upvalueindex(1));
+	return DoLuaScriptCall(_pL, static_cast<int>(funcIndex));
 }
 
 void RegisterFunctions(lua_State* _pL)
@@ -552,8 +559,8 @@ void RegisterFunctions(lua_State* _pL)
 		std::string lN("GML_"); // append "GML_" prefix to the function name.
 		lN += rfname;
 
-		lua_pushnumber(_pL, i);
-		lua_pushnumber(_pL, rf.f_argnumb);
+		lua_pushinteger(_pL, i);
+		lua_pushinteger(_pL, rf.f_argnumb);
 		lua_pushcclosure(_pL, lua_GMLua_cclosure, 2);
 		lua_setglobal(_pL, lN.c_str());
 	}
@@ -564,6 +571,22 @@ void RegisterFunctions(lua_State* _pL)
 	lua_register(_pL, "GMLua_getvarb", lua_GMLua_getvarb);
 	lua_register(_pL, "GMLua_setvarb", lua_GMLua_setvarb);
 	lua_register(_pL, "GMLua_instToPtr", lua_GMLua_instToPtr);
+}
+
+void RegisterScripts(lua_State* _pL)
+{
+	for (int i = 0; i < g_GMLScriptsSize; i++)
+	{
+		const YYGMLFunc& func = g_GMLScripts[i];
+		const std::string fname(func.pName);
+		if (fname.rfind("gml_Script_") != std::string::npos)
+		{
+			const std::string luaName("GMLScript_" + fname);
+			lua_pushinteger(_pL, i);
+			lua_pushcclosure(_pL, lua_GMLua_script_cclosure, 1);
+			lua_setglobal(_pL, luaName.c_str());
+		}
+	}
 }
 
 void LuaToRValue(lua_State* _pL, int a, RValueList& args)

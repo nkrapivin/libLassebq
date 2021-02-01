@@ -7,7 +7,6 @@
 #include "Utils.h"
 #include "GMLConstants.h"
 #include "GMLua.h"
-#include "GMLuaAutogen.h"
 #include "GameSpecific.h"
 #include <WinCon.h>
 #include <fstream>
@@ -369,11 +368,18 @@ CObjectGM* lassebq_make_obj_liblassebq()
 
 void lassebq_initYYC()
 {
-	AllocConsoleQuick();
-	std::cout << "libLassebq by nkrapivindev, built for project " << PROJECT_NAME << std::endl;
-	std::cout << "This thing is experimental, please report any bugs to nik#5351 on Discord." << std::endl;
-	std::cout << "Random quote: " << GetRandomQuote() << std::endl;
-	std::cout << std::endl;
+	InitGMLuaConfig();
+	if (!g_NoConsole)
+	{
+		AllocConsoleQuick();
+
+		std::cout << "libLassebq by nkrapivindev, built for project " << PROJECT_NAME << std::endl;
+		std::cout << "This thing is experimental, please report any bugs to nik#5351 on Discord." << std::endl;
+		std::cout << "Random quote: " << GetRandomQuote() << std::endl;
+		std::cout << std::endl;
+		if (g_ThrowErrors) std::cout << "Will ignore Lua errors, this is VERY evil and unstable!" << std::endl;
+		if (g_AddCollisionEvents) std::cout << "Collision event name generation enabled, loading times will be WAY slower." << std::endl;
+	}
 
 	exeBase = GetModuleHandleW(nullptr);
 	uintptr_t exeAsUint = reinterpret_cast<uintptr_t>(exeBase);
@@ -453,7 +459,6 @@ void lassebq_initYYC()
 
 	// and now, the fun stuff.
 	std::cout << "Initializing GMLua..." << std::endl;
-	InitGMLuaConfig();
 	InitGMLuaScripts();
 	InitLua();
 	lassebq_patchObject(lassebq_make_obj_liblassebq());

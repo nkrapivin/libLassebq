@@ -3,7 +3,6 @@
 #include "GMLFuncs.h"
 #include "libLassebq.h"
 #include "GMLConstants.h"
-#include "GMLuaAutogen.h"
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -32,3 +31,5 @@ int lua_GMLua_getvarb(lua_State* _pL);
 int lua_GMLua_setvarb(lua_State* _pL);
 int lua_GMLua_instToPtr(lua_State* _pL);
 extern bool g_ThrowErrors;
+extern bool g_NoConsole;
+extern bool g_AddCollisionEvents;

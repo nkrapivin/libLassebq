@@ -93,11 +93,15 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;LIBLASSEBQ_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>liblua54.a;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>lua\lib\liblua54.a;pcre\Debug\pcred.lib;pcre\Debug\pcrecppd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <FullProgramDatabaseFile>true</FullProgramDatabaseFile>
+      <GenerateMapFile>true</GenerateMapFile>
+      <MapExports>true</MapExports>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -162,8 +166,6 @@
     <ClInclude Include="GMLConstants.h" />
     <ClInclude Include="GMLFuncs.h" />
     <ClInclude Include="GMLua.h" />
-    <ClInclude Include="GMLuaAutogen.h" />
-    <ClInclude Include="GMLuaAutogenScript.h" />
     <ClInclude Include="KatanaZero.h" />
     <ClInclude Include="KatanaZeroIDs.h" />
     <ClInclude Include="libLassebq.h" />
@@ -196,8 +198,6 @@
     <ClCompile Include="GMLConstants.cpp" />
     <ClCompile Include="GMLFuncs.cpp" />
     <ClCompile Include="GMLua.cpp" />
-    <ClCompile Include="GMLuaAutogen.cpp" />
-    <ClCompile Include="GMLuaAutogenScript.cpp" />
     <ClCompile Include="libLassebq.cpp" />
     <ClCompile Include="Room.cpp" />
     <ClCompile Include="RValue.cpp" />
