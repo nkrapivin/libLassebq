@@ -6,7 +6,6 @@ DetPotRoot DeterminePotentialRoot = nullptr;
 FREE_RVal_Pre FREE_RValue__Pre = nullptr;
 YYSetStr YYSetString = nullptr;
 YYCreStr YYCreateString = nullptr;
-YYAddStr YYAddString = nullptr;
 YYStrDupT YYStrDup = nullptr;
 YYFreeT YYFree = nullptr;
 ARRAYLVal ARRAY_LVAL_RValue = nullptr;
@@ -316,25 +315,6 @@ RValue RValue::operator--(int)
 	RValue tmp(*this);
 	operator--();
 	return tmp;
-}
-
-RValue& RValue::operator+=(const char* v)
-{
-	switch (kind & MASK_KIND_RVALUE)
-	{
-		case VALUE_STRING:
-		{
-			// if string then concatenate, if not then convert to string
-			const char* pFirst = (pRefString != nullptr) ? pRefString->get() : nullptr;
-			char* pNew = YYAddString(pFirst, v);
-			YYCreateString(this, pNew);
-			YYFree(pNew);
-			break;
-		} // end block
-		default: abort();
-	}
-
-	return *this;
 }
 
 bool RValue::operator==(const RValue& rhs) const

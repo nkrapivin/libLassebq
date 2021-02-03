@@ -8,6 +8,27 @@ lua_State* lS = nullptr;
 bool g_AddCollisionEvents = false;
 bool g_ThrowErrors = true;
 bool g_NoConsole = false;
+bool g_IgnoreArgc = false;
+
+int lua_GMLua_ignoreArgc(lua_State* _pL)
+{
+	int Largc = lua_gettop(_pL); // get argument count.
+	if (Largc != 1)
+	{
+		return luaL_error(_pL, __FUNCTION__ " error: Invalid argument count, expected 1, got %d.", Largc);
+	}
+
+	if (lua_isboolean(_pL, 1))
+	{
+		g_IgnoreArgc = lua_toboolean(_pL, 1) == 1 ? true : false;
+	}
+	else
+	{
+		return luaL_error(_pL, __FUNCTION__ " error: Invalid argument type, expected boolean.");
+	}
+
+	return 0;
+}
 
 bool isInvalidConstant(const char* n)
 {
@@ -571,6 +592,7 @@ void RegisterFunctions(lua_State* _pL)
 	lua_register(_pL, "GMLua_getvarb", lua_GMLua_getvarb);
 	lua_register(_pL, "GMLua_setvarb", lua_GMLua_setvarb);
 	lua_register(_pL, "GMLua_instToPtr", lua_GMLua_instToPtr);
+	lua_register(_pL, "GMLua_ignoreArgc", lua_GMLua_ignoreArgc);
 }
 
 void RegisterScripts(lua_State* _pL)
@@ -650,6 +672,8 @@ int RValueToLua(lua_State* _pL, const RValue& result)
 
 bool LuaChkArgs(const int gmargc, int luaargc, lua_State* _pL)
 {
+	if (g_IgnoreArgc) return true;
+
 	if (gmargc != luaargc)
 	{
 		luaL_error(_pL, __FUNCTION__ " error: invalid argument count, expected %d, got %d.", gmargc, luaargc);

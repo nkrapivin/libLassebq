@@ -12,8 +12,6 @@
 #include <list>
 #include <memory>
 
-extern int* g_CurrentEvent;
-extern int* g_CurrentSubtype;
 extern int g_GMLScriptsSize;
 
 // Extension func defines.
@@ -121,13 +119,6 @@ public:
 	virtual RValue& InternalGetYYVarRef(int index) = 0;
 };
 
-typedef RValue&(__thiscall *GetYYVarRef)(YYObjectBase* self, int _Index);
-typedef bool(*VarGetValDirect)(YYObjectBase *inst, int var_ind, int array_ind, RValue *res);
-typedef bool(*VarSetValDirect)(YYObjectBase *inst, int var_ind, int array_ind, RValue *val);
-extern VarGetValDirect Variable_GetValue_Direct;
-extern VarSetValDirect Variable_SetValue_Direct;
-typedef int(*FindRValSlot)(YYObjectBase* object, const char* name);
-extern FindRValSlot FindRValueSlot;
 extern YYObjectBase** g_pGlobal;
 
 struct YYRECT

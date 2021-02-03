@@ -1,6 +1,11 @@
 #include "GameSpecific.h"
 
+#ifdef KZ_105_STEAM
 const char* const VerString = "v1.0.5\n[LLBQ]"; // LLBQ -> LibLasseBQ
+#endif
+#ifdef KZ_105_GOG
+const char* const VerString = "v1.0.5\n[LGOG]";
+#endif
 
 void ApplyGameSpecificPatches(uintptr_t exeBase)
 {

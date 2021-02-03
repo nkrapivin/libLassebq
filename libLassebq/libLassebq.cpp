@@ -21,16 +21,11 @@ HMODULE exeBase = nullptr;
 CHash<CObjectGM>** g_ObjectHashTable = nullptr;
 int g_GMLScriptsSize;
 int g_VariablesSize;
-int* g_CurrentEvent = nullptr;
-int* g_CurrentSubtype = nullptr;
-
-VarGetValDirect Variable_GetValue_Direct = nullptr;
-VarSetValDirect Variable_SetValue_Direct = nullptr;
-FindRValSlot FindRValueSlot = nullptr;
 
 std::unordered_map<std::string, int> fR;
 std::unordered_map<std::string, int> fS;
 std::unordered_map<std::string, int> fV;
+std::unordered_map<std::string, int> fB;
 
 // <object_index, <event_key, function_pointer>>
 std::unordered_map<int, std::unordered_map<unsigned long long, void*>> EventPatchMap;
@@ -40,19 +35,25 @@ RValue Result(0.0);
 YYErrorT YYError = nullptr;
 YYObjectBase** g_pGlobal = nullptr;
 
+void lassebq_find_bvars() {
+	for (int i = 0; i < 500; i++)
+	{
+		const RVariableRoutine& rvr = g_BuiltinVars[i];
+		if (rvr.f_getroutine == nullptr || rvr.f_name == nullptr) break;
+		fB[rvr.f_name] = i;
+	}
+}
+
 void lassebq_free_result() {
 	Result.~RValue();
 }
 
-bool lassebq_getvar_direct(std::string name, RValue& ret, int array_index = ARRAY_INDEX_NO_INDEX)
-{
-	if (fV.find(name) == fV.end())
-	{
-		std::cout << "TRIED TO ACCESS A NON-EXISTING VARIABLE " << name << std::endl;
-		abort();
-	}
-
-	return Variable_GetValue_Direct(reinterpret_cast<YYObjectBase*>(g_Self), fV[name], array_index, &ret);
+int lassebq_get_bvar(const std::string name) {
+	int ind = fB[name];
+	if (ind < 0 || ind > 500) abort();
+	lassebq_free_result();
+	g_BuiltinVars[ind].f_getroutine(g_Self, ARRAY_INDEX_NO_INDEX, &Result);
+	return Result.asInt32();
 }
 
 void lassebq_callr(std::string id, const RValueList& args = { })
@@ -132,14 +133,17 @@ void lassebq_lua_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 {
 	g_Self = _pSelf;
 	g_Other = _pOther;
-	CEvent* ev = GetEventRecursive(_pSelf->m_pObject, *g_CurrentEvent, *g_CurrentSubtype);
+	
+	int event_type = lassebq_get_bvar("event_type");
+	int event_numb = lassebq_get_bvar("event_number");
+	CEvent* ev = GetEventRecursive(_pSelf->m_pObject, event_type, event_numb);
 	YY_STACKTRACE_FUNC_ENTRY(ev->e_code->i_pName, 0);
 
 	char luaFuncName[256]{ '\0' };
 	// "objectname_eventname"
 	snprintf(luaFuncName, sizeof(luaFuncName), "%s_%s",
 		_pSelf->m_pObject->m_pName,
-		mapOfEvents[lassebq_evKey(*g_CurrentEvent, *g_CurrentSubtype)].c_str()
+		mapOfEvents[lassebq_evKey(event_type, event_numb)].c_str()
 	);
 
 	YY_STACKTRACE_LINE(1);
@@ -197,13 +201,15 @@ void lassebq_luaPatch_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 	g_Other = _pOther;
 
 	// Execute the original event.
-	unsigned long long evKey = lassebq_evKey(*g_CurrentEvent, *g_CurrentSubtype);
+	int event_type = lassebq_get_bvar("event_type");
+	int event_numb = lassebq_get_bvar("event_number");
+	unsigned long long evKey = lassebq_evKey(event_type, event_numb);
 	GML_ObjectEvent origptr = reinterpret_cast<GML_ObjectEvent>
 		(EventPatchMap[_pSelf->m_pObject->m_ID][evKey]);
 	origptr(_pSelf, _pOther);
 
 	// Execute the lua function.
-	CEvent* ev = GetEventRecursive(_pSelf->m_pObject, *g_CurrentEvent, *g_CurrentSubtype);
+	CEvent* ev = GetEventRecursive(_pSelf->m_pObject, event_type, event_numb);
 	// Why? When the original event returns, it will call Stacktrace's destructor, thus null-ing it
 	// So we need to make a new instance of the stacktrace :/
 	YY_STACKTRACE_FUNC_ENTRY(ev->e_code->i_pName, 0);
@@ -306,7 +312,6 @@ void lassebq_patchObject(CObjectGM* gmObj)
 					lua_getglobal(lS, buf);
 					if (lua_isfunction(lS, -1))
 					{
-						CObjectGM* cogm = lassebq_find_obj(i);
 						int type = static_cast<int>(pair.first >> 32ull);
 						int subtype = static_cast<int>(pair.first & 0xFFFFFFFFull);
 						CEvent* origev = GetEventRecursive(cogm, type, subtype);
@@ -317,7 +322,7 @@ void lassebq_patchObject(CObjectGM* gmObj)
 							||  origev->e_code->i_pFunc->ptr == lassebq_luaPatch_GMLRoutine)
 								continue;
 
-							std::cout << "AN EVENT " << pair.second << " ALREADY EXISTS! brb replacing..." << std::endl;
+							std::cout << "AN EVENT " << buf << " ALREADY EXISTS! brb replacing..." << std::endl;
 							EventPatchMap[i][pair.first] = origev->e_code->i_pFunc->ptr; // save the original function.
 							origev->e_code->i_pFunc->ptr = lassebq_luaPatch_GMLRoutine;
 							continue;
@@ -376,6 +381,9 @@ void lassebq_initYYC()
 		std::cout << "libLassebq by nkrapivindev, built for project " << PROJECT_NAME << std::endl;
 		std::cout << "This thing is experimental, please report any bugs to nik#5351 on Discord." << std::endl;
 		std::cout << "Random quote: " << GetRandomQuote() << std::endl;
+#ifdef KZ_105_GOG
+		std::cout << "KZ_105_GOG, Katana Zero v1.0.5 Windows GOG" << std::endl;
+#endif
 		std::cout << std::endl;
 		if (g_ThrowErrors) std::cout << "Will ignore Lua errors, this is VERY evil and unstable!" << std::endl;
 		if (g_AddCollisionEvents) std::cout << "Collision event name generation enabled, loading times will be WAY slower." << std::endl;
@@ -416,14 +424,10 @@ void lassebq_initYYC()
 	ARRAY_LVAL_RValue = reinterpret_cast<ARRAYLVal>(exeAsUint + ARRAY_LVAL_RV_Addr);
 	YYSetString = reinterpret_cast<YYSetStr>(exeAsUint + YYSetString_Addr);
 	YYCreateString = reinterpret_cast<YYCreStr>(exeAsUint + YYCreateString_Addr);
-	YYAddString = reinterpret_cast<YYAddStr>(exeAsUint + YYAddString_Addr);
 	YYStrDup = reinterpret_cast<YYStrDupT>(exeAsUint + YYStrDup_Addr);
 	YYFree = reinterpret_cast<YYFreeT>(exeAsUint + YYFree_Addr);
 	g_Self = nullptr;
 	SYYStackTrace::s_pStart = reinterpret_cast<SYYStackTrace**>(exeAsUint + YYSTraceStart_Addr);
-
-	g_CurrentEvent = reinterpret_cast<int*>(exeAsUint + Current_Event_Addr);
-	g_CurrentSubtype = reinterpret_cast<int*>(exeAsUint + Current_Subtype_Addr);
 
 	// remove this later
 	g_ConstNames = reinterpret_cast<const char***>(exeAsUint + ConstNames_Addr);
@@ -437,10 +441,8 @@ void lassebq_initYYC()
 	DeterminePotentialRoot = reinterpret_cast<DetPotRoot>(exeAsUint + DeterminePotRoot_Addr);
 	GetEventRecursive = reinterpret_cast<GetEvRecurs>(exeAsUint + GetEvRecursive_Addr);
 	InsertEvent = reinterpret_cast<InsertEv>(exeAsUint + InsertEvent_Addr);
-	Variable_GetValue_Direct = reinterpret_cast<VarGetValDirect>(exeAsUint + VarGetValueDirect_Addr);
-	Variable_SetValue_Direct = reinterpret_cast<VarSetValDirect>(exeAsUint + VarSetValueDirect_Addr);
-	FindRValueSlot = reinterpret_cast<FindRValSlot>(exeAsUint + FindRValueSlot_Addr);
 	g_BuiltinVars = reinterpret_cast<RVariableRoutine*>(exeAsUint + BuiltinVars_Addr);
+	lassebq_find_bvars();
 
 	for (int i = 0; i < *g_RFunctionTableLen; i++)
 	{
