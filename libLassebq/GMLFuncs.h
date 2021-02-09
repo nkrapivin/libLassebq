@@ -1,5 +1,6 @@
 #pragma once
 #include "RValue.h"
+#include "GMAddresses.h"
 #include <list>
 
 class CInstance;
@@ -23,11 +24,13 @@ struct YYGMLFunc
 
 struct RFunction
 {
-	char f_name[64];
+	char f_name[64]; // may overflow :(
 	TRoutine f_routine;
 	int f_argnumb;
+#ifndef DITTO_WIN_STEAM /* TODO: figure out why? */
 	bool f_regonly;
-	unsigned int m_UsageCount;
+#endif
+	unsigned int m_UsageCount; // always UINT_MAX?
 };
 
 extern YYGMLFunc* g_GMLScripts;

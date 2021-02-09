@@ -2,8 +2,13 @@
 //
 
 #include "libLassebq.h"
+#ifdef DITTO_WIN_STEAM
+#include "TheSwordsOfDitto.h"
+#else
 #include "KatanaZero.h"
-#include "KatanaZeroIDs.h"
+#endif
+
+#include "GMAddresses.h"
 #include "Utils.h"
 #include "GMLConstants.h"
 #include "GMLua.h"
@@ -14,18 +19,15 @@
 #include <unordered_map>
 #include <sstream>
 
-#define PROMPT "> "
-#define PRINT_VAR(cl,n) oS << #n << " = " << cl->i_##n << std::endl
-
 HMODULE exeBase = nullptr;
 CHash<CObjectGM>** g_ObjectHashTable = nullptr;
 int g_GMLScriptsSize;
 int g_VariablesSize;
 
-std::unordered_map<std::string, int> fR;
-std::unordered_map<std::string, int> fS;
-std::unordered_map<std::string, int> fV;
-std::unordered_map<std::string, int> fB;
+std::unordered_map<std::string, int> fR; // runtime funcs
+std::unordered_map<std::string, int> fS; // script
+std::unordered_map<std::string, int> fV; // var
+std::unordered_map<std::string, int> fB; // builtin
 
 // <object_index, <event_key, function_pointer>>
 std::unordered_map<int, std::unordered_map<unsigned long long, void*>> EventPatchMap;
@@ -34,6 +36,11 @@ RValue Result(0.0);
 
 YYErrorT YYError = nullptr;
 YYObjectBase** g_pGlobal = nullptr;
+
+typedef CEvent*(__thiscall *GetEvRecurs)(CObjectGM* self, int etype, int esubtype);
+typedef void(__thiscall *InsertEv)(CHashMap<unsigned long long, CEvent*, 3> *self, unsigned long long _key, CEvent* _value);
+GetEvRecurs GetEventRecursive = nullptr;
+InsertEv InsertEvent = nullptr;
 
 void lassebq_find_bvars() {
 	for (int i = 0; i < 500; i++)
@@ -94,8 +101,11 @@ void lassebq_doLua(CInstance* _pSelf, CInstance* _pOther, const char* _pLFName) 
 				// push pSelf/pOther as arguments to the function call...
 				lua_pushlightuserdata(lS, _pSelf);
 				lua_pushlightuserdata(lS, _pOther);
+				int lArgc = 2;
+				int rnum = 0;
+
 				// do the luacall
-				r = lua_pcall(lS, 2, 0, 0);
+				r = lua_pcall(lS, lArgc, rnum, 0);
 				if (r != LUA_OK)
 				{
 					errmsg = lua_tostring(lS, -1);
@@ -118,11 +128,6 @@ void lassebq_doLua(CInstance* _pSelf, CInstance* _pOther, const char* _pLFName) 
 		}
 	}
 }
-
-typedef CEvent*(__thiscall *GetEvRecurs)(CObjectGM* self, int etype, int esubtype);
-typedef void(__thiscall *InsertEv)(CHashMap<unsigned long long, CEvent*, 3> *self, unsigned long long _key, CEvent* _value);
-GetEvRecurs GetEventRecursive = nullptr;
-InsertEv InsertEvent = nullptr;
 
 unsigned long long lassebq_evKey(int etype, int esubtype)
 {
@@ -150,6 +155,7 @@ void lassebq_lua_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 	lassebq_doLua(_pSelf, _pOther, luaFuncName);
 }
 
+#ifndef DITTO_WIN_STEAM
 void lassebq_antiSpeedrunCheat_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 {
 	g_Self = _pSelf;
@@ -194,6 +200,7 @@ void lassebq_antiSpeedrunCheat_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 	lassebq_callr("draw_set_valign", { oldV });
 	YY_STACKTRACE_LINE(6);
 }
+#endif
 
 void lassebq_luaPatch_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 {
@@ -268,13 +275,6 @@ CEvent* lassebq_fake_CEvent(int oIndex, CCode* ptr)
 	return evt;
 }
 
-void lassebq_addEventAlt(CObjectGM* gmObj, unsigned long long key, const char* name, GML_ObjectEvent evt)
-{
-	CCode* code = lassebq_fake_CCode(evt, name);
-	CEvent* ev = lassebq_fake_CEvent(gmObj->m_ID, code);
-	InsertEvent(gmObj->m_eventsMap, key, ev);
-}
-
 void lassebq_addEvent(CObjectGM* gmObj, int etype, int esubtype, const char* name, GML_ObjectEvent evt)
 {
 	unsigned long long key = lassebq_evKey(etype, esubtype);
@@ -283,7 +283,7 @@ void lassebq_addEvent(CObjectGM* gmObj, int etype, int esubtype, const char* nam
 	InsertEvent(gmObj->m_eventsMap, key, ev);
 }
 
-void lassebq_patchObject(CObjectGM* gmObj)
+void lassebq_patchObject()
 {
 	std::cout << "Trying to patch lassebq obj..." << std::endl;
 
@@ -296,10 +296,12 @@ void lassebq_patchObject(CObjectGM* gmObj)
 		{
 			for (int i = 0; true; i++)
 			{
+#ifndef DITTO_WIN_STEAM
 				if (i == EtoI(GameObjects::obj_speedrun_results_screen))
 				{
 					continue; // ignore any event replaces for obj_speedrun_results_screen.
 				}
+#endif
 
 				CObjectGM* cogm = lassebq_find_obj(i);
 				if (cogm == nullptr) break;
@@ -344,7 +346,7 @@ void lassebq_patchObject(CObjectGM* gmObj)
 	std::cout << "Done! Did it work? :)" << std::endl;
 }
 
-CObjectGM* lassebq_make_obj_liblassebq()
+void lassebq_make_obj_liblassebq()
 {
 	//lassebq_dbg();
 	lassebq_callr("object_add");
@@ -361,14 +363,14 @@ CObjectGM* lassebq_make_obj_liblassebq()
 
 	// Since Run_Room is NULL, we're not actually in any room just yet
 	// WHICH MEANS, WE CAN DO THIS:
-	lassebq_callr("room_instance_add", { EtoD(GameRooms::room_init), 0.0, 0.0, obj_index });
+	lassebq_callr("room_instance_add", { 0.0, 0.0, 0.0, obj_index });
 	// room_instance_add our object at position 0;0
 
 	// do not modify or remove these two lines.
+#if defined(KZ_105_GOG) || defined(KZ_105_STEAM)
 	CObjectGM* speedrun_thing = lassebq_find_obj(EtoI(GameObjects::obj_speedrun_results_screen));
 	lassebq_addEvent(speedrun_thing, static_cast<int>(ev_draw), static_cast<int>(ev_gui_end), "libLassebq_antiSpeedrunCheat_DrawGUIEnd", lassebq_antiSpeedrunCheat_GMLRoutine);
-
-	return oNode; // return our object so we can patch events :D
+#endif
 }
 
 void lassebq_initYYC()
@@ -383,6 +385,9 @@ void lassebq_initYYC()
 		std::cout << "Random quote: " << GetRandomQuote() << std::endl;
 #ifdef KZ_105_GOG
 		std::cout << "KZ_105_GOG, Katana Zero v1.0.5 Windows GOG" << std::endl;
+#endif
+#ifdef DITTO_WIN_STEAM
+		std::cout << "DITTO_WIN_STEAM, The Swords of Ditto 1.17.05-205 STM" << std::endl;
 #endif
 		std::cout << std::endl;
 		if (g_ThrowErrors) std::cout << "Will ignore Lua errors, this is VERY evil and unstable!" << std::endl;
@@ -446,8 +451,8 @@ void lassebq_initYYC()
 
 	for (int i = 0; i < *g_RFunctionTableLen; i++)
 	{
-		RFunction* RFunc = &(*g_RFunctionTable)[i];
-		fR[RFunc->f_name] = i;
+		const RFunction& RFunc = (*g_RFunctionTable)[i];
+		fR[RFunc.f_name] = i;
 	}
 
 	g_pGlobal = reinterpret_cast<YYObjectBase**>(exeAsUint + Global_YYObject_Addr);
@@ -463,7 +468,10 @@ void lassebq_initYYC()
 	std::cout << "Initializing GMLua..." << std::endl;
 	InitGMLuaScripts();
 	InitLua();
-	lassebq_patchObject(lassebq_make_obj_liblassebq());
+#ifndef DITTO_WIN_STEAM /* the heck ditto does? o_O */
+	lassebq_make_obj_liblassebq();
+#endif
+	lassebq_patchObject();
 
 	// very cursed.
 	std::cout << "Applying " << PROJECT_NAME << " specific patches..." << std::endl;
@@ -479,198 +487,21 @@ void lassebq_initYYC()
 	SetForegroundWindow(hGMWindow);
 }
 
-void lassebq_print_global_rvars(std::ostream& oS)
-{
-	lassebq_callr("variable_instance_get_names", { global });
-	RValue arr(Result);
-
-	oS << "-------------------------------" << std::endl;
-	if (arr.asArray() == nullptr)
-	{
-		oS << "No RValues!" << std::endl;
-	}
-	else
-	{
-		int arrlen = arr.asArray()->length;
-
-		for (int i = 0; i < arrlen; i++)
-		{
-			std::string varName = arr[i].asString();
-			oS << varName << " = ";
-			lassebq_callr("variable_global_get", { varName });
-			oS << Result.asString() << std::endl;
-		}
-	}
-	oS << "-------------------------------" << std::endl;
-}
-
-void lassebq_print_instance_rvars(int instid, std::ostream& oS)
-{
-	CRoom* curRoom = *g_RunRoom;
-	CInstance* inst = curRoom->m_Active.m_pFirst;
-	while (inst != nullptr)
-	{
-		if (inst->i_id == instid) break;
-		inst = inst->m_pNext;
-	}
-
-	if (inst == nullptr)
-	{
-		std::cout << "INSTANCE DOES NOT EXIST!" << std::endl;
-		return;
-	}
-
-	oS << "-------------------------------" << std::endl;
-	// very slow :/
-	RValue arr(0.0);
-	int variable_instance_get_names = fR["variable_instance_get_names"];
-	int variable_instance_get = fR["variable_instance_get"];
-	CallRFunction(variable_instance_get_names, arr, { instid });
-
-	if (arr.asArray() == nullptr)
-	{
-		std::cout << "No RValues!" << std::endl;
-	}
-	else
-	{
-		int arrlen = arr.asArray()->length;
-
-		for (int i = 0; i < arrlen; i++)
-		{
-			std::string varName = arr[i].asString();
-			oS << varName << " = ";
-			lassebq_callr("variable_instance_get", { instid, varName });
-			oS << Result.asString() << std::endl;
-		}
-	}
-
-	oS << "-------------------------------" << std::endl;
-}
-
-void lassebq_print_instance_vars(int instid, std::ostream& oS)
-{
-	CRoom* curRoom = *g_RunRoom;
-	CInstance* inst = curRoom->m_Active.m_pFirst;
-	while (inst != nullptr)
-	{
-		if (inst->i_id == instid) break;
-		inst = inst->m_pNext;
-	}
-
-	if (inst == nullptr)
-	{
-		std::cout << "INSTANCE DOES NOT EXIST!" << std::endl;
-		return;
-	}
-
-	oS << "-------------------------------" << std::endl;
-	PRINT_VAR(inst, id);
-	PRINT_VAR(inst, object_index);
-	PRINT_VAR(inst, sprite_index);
-	PRINT_VAR(inst, image_index);
-	PRINT_VAR(inst, image_speed);
-	PRINT_VAR(inst, image_scalex);
-	PRINT_VAR(inst, image_scaley);
-	PRINT_VAR(inst, image_angle);
-	PRINT_VAR(inst, image_alpha);
-	PRINT_VAR(inst, image_blend);
-	PRINT_VAR(inst, x);
-	PRINT_VAR(inst, y);
-	PRINT_VAR(inst, xstart);
-	PRINT_VAR(inst, ystart);
-	PRINT_VAR(inst, xprevious);
-	PRINT_VAR(inst, yprevious);
-	PRINT_VAR(inst, direction);
-	PRINT_VAR(inst, speed);
-	PRINT_VAR(inst, friction);
-	PRINT_VAR(inst, gravity_direction);
-	PRINT_VAR(inst, gravity);
-	PRINT_VAR(inst, hspeed);
-	PRINT_VAR(inst, vspeed);
-	oS << "bbox_left = " << inst->i_bbox.bbox_left << std::endl;
-	oS << "bbox_top = " << inst->i_bbox.bbox_top << std::endl;
-	oS << "bbox_right = " << inst->i_bbox.bbox_right << std::endl;
-	oS << "bbox_bottom = " << inst->i_bbox.bbox_bottom << std::endl;
-
-	for (int i = 0; i < sizeof(inst->i_timer) / sizeof(*inst->i_timer); i++)
-	{
-		oS << "alarm[" << i << "] = " << inst->i_timer[i] << std::endl;
-	}
-
-	if (inst->m_pPathAndTimeline != nullptr)
-	{
-		PRINT_VAR(inst->m_pPathAndTimeline, path_index);
-		PRINT_VAR(inst->m_pPathAndTimeline, path_position);
-		PRINT_VAR(inst->m_pPathAndTimeline, path_positionprevious);
-		PRINT_VAR(inst->m_pPathAndTimeline, path_speed);
-		PRINT_VAR(inst->m_pPathAndTimeline, path_scale);
-		PRINT_VAR(inst->m_pPathAndTimeline, path_orientation);
-		PRINT_VAR(inst->m_pPathAndTimeline, path_end);
-		PRINT_VAR(inst->m_pPathAndTimeline, path_xstart);
-		PRINT_VAR(inst->m_pPathAndTimeline, path_ystart);
-		PRINT_VAR(inst->m_pPathAndTimeline, timeline_index);
-		PRINT_VAR(inst->m_pPathAndTimeline, timeline_prevposition);
-		PRINT_VAR(inst->m_pPathAndTimeline, timeline_position);
-		PRINT_VAR(inst->m_pPathAndTimeline, timeline_speed);
-	}
-	else
-	{
-		oS << "[ path_* and timeline_* variables are unset!!! ]" << std::endl;
-	}
-
-	PRINT_VAR(inst, layer);
-	PRINT_VAR(inst, mask_index);
-	PRINT_VAR(inst, nMouseOver);
-	PRINT_VAR(inst, depth);
-	PRINT_VAR(inst, currentdepth);
-	PRINT_VAR(inst, lastImageNumber);
-	PRINT_VAR(inst, collisionTestNumber);
-	oS << "-------------------------------" << std::endl;
-}
-
-void lassebq_print_instances(std::ostream& oS)
-{
-	CRoom* curRoom = *g_RunRoom;
-	CInstance* inst = curRoom->m_Active.m_pFirst;
-	oS << "-------------------------------" << std::endl;
-	while (inst != nullptr)
-	{
-		oS << inst->i_id << " " << inst->m_pObject->m_pName << std::endl;
-		inst = inst->m_pNext;
-	}
-	oS << "-------------------------------" << std::endl;
-}
-
-void lassebq_wrong_args()
-{
-	std::cout << "Invalid arguments." << std::endl;
-}
-
-LPSTR lassebq_WtoM(const std::wstring& wstr) {
-	int size = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, nullptr, 0, nullptr, nullptr);
-	LPSTR str = new CHAR[size];
-	WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, str, size, nullptr, nullptr);
-	return str;
-}
-
 funcR lassebq_init()
 {
+	// do the job.
+	lassebq_initYYC();
 	return 1.0;
 }
 
 funcR lassebq_shutdown()
 {
+	// TODO: do something more complicated than this?
+	lua_close(lS);
 	return 1.0;
 }
 
-funcV RegisterCallbacks(GML_create_async_event cae, GML_ds_map_create dmc, GML_ds_map_add_real dmar, GML_ds_map_add_string dmas)
+funcV RegisterCallbacks(char* p1, char* p2, char* p3, char* p4)
 {
-	// set our callback stuff...
-	create_async_event = cae;
-	ds_map_create = dmc;
-	ds_map_add_real = dmar;
-	ds_map_add_string = dmas;
-
-	// do the job.
-	lassebq_initYYC();
+	// does nothing. i'll leave it here just in case.
 }

@@ -1,7 +1,7 @@
 #pragma once
 
 // What addresses to use?
-#define KZ_105_GOG
+#define KZ_105_STEAM
 
 // Please please please, keep address format like this:
 // #define Something_Addr (0xSOMETHINGu)
@@ -60,6 +60,29 @@
 #define MenuVersionString_Addr (0x01232846u)
 #endif
 
-#ifdef DITTO_WIN_STM /* The Swords of Ditto Windows Steam */
-/* TODO! */
+#ifdef DITTO_WIN_STEAM /* The Swords of Ditto 1.17.05-205 STM Windows Steam */
+#define RFunctionTable_Addr    (0x02C4ABDCu)
+#define RFunctionTableL_Addr   (0x02C4ABE0u)
+#define FREE_RValue__Pre_Addr  (0x00001070u)
+#define YYSetString_Addr       (0x023709C0u) /* TODO, CHECK(!) */
+#define YYCreateString_Addr    (0x0236F980u)
+#define YYStrDup_Addr          (0x02370A40u)
+#define YYFree_Addr            (0x023BF910u)
+#define ARRAY_LVAL_RV_Addr     (0x02371200u)
+#define Variable_Addr          (0x02979E98u)
+#define GMLScript_Addr         (0x02982340u)
+#define Run_Room_Addr          (0x02C46960u)
+#define Global_YYObject_Addr   (0x02A2ADE8u)
+#define Object_Hash_Addr       (0x02A356ECu)
+#define GetCtxStackTop_Addr    (0x0236A510u)
+#define DeterminePotRoot_Addr  (0x02352BA0u)
+#define GetEvRecursive_Addr    (0x023C1C40u)
+#define InsertEvent_Addr       (0x023C1DE0u)
+#define YYSTraceStart_Addr     (0x02A257D4u)
+#define BuiltinVars_Addr       (0x02A2B2F0u)
+#define YYError_Addr           (0x0236FB90u)
+#define ConstNumb_Addr         (0x02C4E090u)
+#define ConstNames_Addr        (0x02C4E088u)
+#define ConstValues_Addr       (0x02C4E08cu)
+#define MenuVersionString_Addr (0x01232846u)
 #endif

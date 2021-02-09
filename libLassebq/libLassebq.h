@@ -2,7 +2,6 @@
 #include "stdafx.h"
 #include "pcre\include\pcre.h"
 #include "RValue.h"
-#include "GMCallbacks.h"
 #include "SYYStackTrace.h"
 #include "GMLFuncs.h"
 #include "Data.h"
@@ -19,9 +18,11 @@ extern int g_GMLScriptsSize;
 #define funcS extern "C" __declspec(dllexport) const char * __cdecl 
 #define funcV extern "C" __declspec(dllexport) void         __cdecl 
 
+void lassebq_initYYC(void);
+
 funcR lassebq_init();
 funcR lassebq_shutdown();
-funcV RegisterCallbacks(GML_create_async_event cae, GML_ds_map_create dmc, GML_ds_map_add_real dmar, GML_ds_map_add_string dmas);
+funcV RegisterCallbacks(char* p1, char* p2, char* p3, char* p4);
 
 enum YYOBJECTBASE_KIND : int {
 	YYOBJECTBASE = 0,

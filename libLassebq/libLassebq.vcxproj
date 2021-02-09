@@ -161,13 +161,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Data.h" />
+    <ClInclude Include="DittoRAMProxy.h" />
     <ClInclude Include="GameSpecific.h" />
-    <ClInclude Include="GMCallbacks.h" />
     <ClInclude Include="GMLConstants.h" />
     <ClInclude Include="GMLFuncs.h" />
     <ClInclude Include="GMLua.h" />
     <ClInclude Include="KatanaZero.h" />
-    <ClInclude Include="KatanaZeroIDs.h" />
+    <ClInclude Include="GMAddresses.h" />
     <ClInclude Include="libLassebq.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="Room.h" />
@@ -175,10 +175,12 @@
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="SYYStackTrace.h" />
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="TheSwordsOfDitto.h" />
     <ClInclude Include="Utils.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Data.cpp" />
+    <ClCompile Include="DittoRAMProxy.cpp" />
     <ClCompile Include="dllmain.cpp">
       <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</CompileAsManaged>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -194,7 +196,6 @@
       </PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="GameSpecific.cpp" />
-    <ClCompile Include="GMCallbacks.cpp" />
     <ClCompile Include="GMLConstants.cpp" />
     <ClCompile Include="GMLFuncs.cpp" />
     <ClCompile Include="GMLua.cpp" />

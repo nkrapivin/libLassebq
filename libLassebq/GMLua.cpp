@@ -1,5 +1,9 @@
 #include "GMLua.h"
+#ifdef DITTO_WIN_STEAM
+#include "TheSwordsOfDitto.h"
+#else
 #include "KatanaZero.h"
+#endif
 #include "Utils.h"
 
 #define THROW(x) throw std::runtime_error((x))
@@ -9,6 +13,7 @@ bool g_AddCollisionEvents = false;
 bool g_ThrowErrors = true;
 bool g_NoConsole = false;
 bool g_IgnoreArgc = false;
+bool g_AddScripts = false;
 
 int lua_GMLua_ignoreArgc(lua_State* _pL)
 {
@@ -182,6 +187,10 @@ void InitGMLuaConfig(void)
 		else if (line == "addCollisionEvents")
 		{
 			g_AddCollisionEvents = true;
+		}
+		else if (line == "addScripts")
+		{
+			g_AddScripts = true;
 		}
 		else if (line == "ignoreLuaErrors")
 		{
@@ -623,6 +632,7 @@ int RValueToLua(lua_State* _pL, const RValue& result)
 	switch (mKind)
 	{
 		case VALUE_UNSET:
+			//luaL_error(__FUNCTION__ " error: Tried to convert an UNSET")
 			return 0;
 		case VALUE_REAL:
 			lua_pushnumber(_pL, result.val);
@@ -768,73 +778,4 @@ void InitLua(void)
 	RegisterVarids(lS);
 	RegisterBuiltinVarids(lS);
 	RegisterScripts(lS);
-}
-
-void DumpRFunctions(void)
-{
-	std::ofstream hdr("kek.h", std::ofstream::trunc);
-	std::ofstream src("kek.c", std::ofstream::trunc);
-	std::ofstream rfc("kek.hpp", std::ofstream::trunc);
-
-	hdr << "#pragma once" << std::endl << std::endl;
-	hdr << "#include \"GMLua.h\"" << std::endl << std::endl;
-	src << "#include \"GMLuaAutogen.h\"" << std::endl << std::endl;
-	for (int i = 0; i < *g_RFunctionTableLen; i++)
-	{
-		const RFunction& rf = (*g_RFunctionTable)[i];
-		if (strchr(rf.f_name, '@') || strchr(rf.f_name, '$') || strlen(rf.f_name) >= sizeof(rf.f_name)) continue;
-
-		hdr << "int lua_" << rf.f_name << "(lua_State *_pL); // takes " << rf.f_argnumb << " arguments" << std::endl;
-		rfc << "case " << i << ": return (lua_" << rf.f_name << ");" << std::endl;
-
-		src << "int lua_" << rf.f_name << "(lua_State *_pL) { return DoLuaGMLCall(_pL, " << i << ", " << rf.f_argnumb << "); }";
-		src << std::endl;
-	}
-
-	hdr.close();
-	src.close();
-	rfc.close();
-}
-
-void DumpGMLScripts(void)
-{
-	std::ofstream h("GMLuaAutogenScript.h", std::ofstream::trunc);
-	std::ofstream c("GMLuaAutogenScript.cpp", std::ofstream::trunc);
-	std::ofstream r("GMLuaAutogenRegister.cpp", std::ofstream::trunc);
-	std::ofstream e("enum.h", std::ofstream::trunc);
-
-	const std::string pref("gml_Script_");
-	h << "#pragma once" << std::endl;
-	h << "#include \"GMLua.h\"" << std::endl;
-	h << "void RegisterScripts(lua_State *_pL);" << std::endl;
-	h << std::endl;
-	c << "#include \"GMLuaAutogenScript.h\"" << std::endl;
-	c << std::endl;
-	r << "void RegisterScripts(lua_State* _pL) {" << std::endl;
-	for (int i = 0; i < g_GMLScriptsSize; i++)
-	{
-		std::string n(g_GMLScripts[i].pName);
-		if (n.rfind(pref) != std::string::npos)
-		{
-			std::string ss = n.substr(pref.length());
-			h << "int lua_Script_" << ss << "(lua_State *_pL);" << std::endl;
-			c << "int lua_Script_" << ss << "(lua_State *_pL) { return DoLuaScriptCall(_pL, " << i << "); }" << std::endl;
-			r << "    lua_register(_pL, \"GMLScript_" << ss << "\", lua_Script_" << ss << ");" << std::endl;
-		}
-	}
-	r << "}" << std::endl;
-
-	e << "enum _VARIABLE_ID {" << std::endl;
-	for (int i = 0; true; i++)
-	{
-		if (g_Variables[i] == nullptr) break;
-		e << "    VARIABLE_" << g_Variables[i]->pName << " = " << i << "," << std::endl;
-	}
-	e << "};" << std::endl << std::endl;
-	e << "typedef _VARIABLE_ID VARIABLE_ID;" << std::endl;
-
-	h.close();
-	c.close();
-	r.close();
-	e.close();
 }
