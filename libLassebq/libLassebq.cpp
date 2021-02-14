@@ -99,8 +99,16 @@ void lassebq_doLua(CInstance* _pSelf, CInstance* _pOther, const char* _pLFName) 
 			if (lua_isfunction(lS, -1)) // if the function exists...
 			{
 				// push pSelf/pOther as arguments to the function call...
-				lua_pushlightuserdata(lS, _pSelf);
-				lua_pushlightuserdata(lS, _pOther);
+				// TODO: wrappers?
+				CInstance** luaSelf = reinterpret_cast<CInstance**>(lua_newuserdata(lS, sizeof(CInstance**)));
+				*luaSelf = _pSelf;
+				luaL_getmetatable(lS, "__libLassebq_GMLInstance_metatable");
+				lua_setmetatable(lS, -2);
+				CInstance** luaOther = reinterpret_cast<CInstance**>(lua_newuserdata(lS, sizeof(CInstance**)));
+				*luaOther = _pOther;
+				luaL_getmetatable(lS, "__libLassebq_GMLInstance_metatable");
+				lua_setmetatable(lS, -2);
+
 				int lArgc = 2;
 				int rnum = 0;
 
@@ -365,6 +373,8 @@ void lassebq_make_obj_liblassebq()
 	// WHICH MEANS, WE CAN DO THIS:
 	lassebq_callr("room_instance_add", { 0.0, 0.0, 0.0, obj_index });
 	// room_instance_add our object at position 0;0
+	// first room only.
+	std::cout << "libLassebq object instance id " << Result.asInt32() << std::endl;
 
 	// do not modify or remove these two lines.
 #if defined(KZ_105_GOG) || defined(KZ_105_STEAM)
@@ -457,6 +467,10 @@ void lassebq_initYYC()
 
 	g_pGlobal = reinterpret_cast<YYObjectBase**>(exeAsUint + Global_YYObject_Addr);
 
+#ifndef DITTO_WIN_STEAM /* the heck ditto does? o_O */
+	lassebq_make_obj_liblassebq();
+#endif
+
 	//WaitForDebugger();
 	// I'd print authors and copyright before doing any lua stuff
 	std::cout << std::endl;
@@ -468,9 +482,6 @@ void lassebq_initYYC()
 	std::cout << "Initializing GMLua..." << std::endl;
 	InitGMLuaScripts();
 	InitLua();
-#ifndef DITTO_WIN_STEAM /* the heck ditto does? o_O */
-	lassebq_make_obj_liblassebq();
-#endif
 	lassebq_patchObject();
 
 	// very cursed.
@@ -481,16 +492,17 @@ void lassebq_initYYC()
 	std::cout << std::endl;
 
 	// oh, at long last, switch to our game window instead of the console window :/
-	lassebq_callr("window_handle");
-	HWND hGMWindow = reinterpret_cast<HWND>(Result.asPointer());
-	SetActiveWindow(hGMWindow);
-	SetForegroundWindow(hGMWindow);
+	if (!g_NoConsole)
+	{
+		lassebq_callr("window_handle");
+		HWND hGMWindow = reinterpret_cast<HWND>(Result.asPointer());
+		SetActiveWindow(hGMWindow);
+		SetForegroundWindow(hGMWindow);
+	}
 }
 
 funcR lassebq_init()
 {
-	// do the job.
-	lassebq_initYYC();
 	return 1.0;
 }
 
@@ -503,5 +515,6 @@ funcR lassebq_shutdown()
 
 funcV RegisterCallbacks(char* p1, char* p2, char* p3, char* p4)
 {
-	// does nothing. i'll leave it here just in case.
+	// do the job.
+	lassebq_initYYC();
 }

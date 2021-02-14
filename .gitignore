@@ -3,4 +3,5 @@
 /Release
 /libLassebq/Release
 .vs/
+/libLassebq/libLassebq.vcxproj.user
 libLassebq.VC.db

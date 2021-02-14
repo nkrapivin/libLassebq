@@ -14,13 +14,14 @@ bool g_ThrowErrors = true;
 bool g_NoConsole = false;
 bool g_IgnoreArgc = false;
 bool g_AddScripts = false;
+int alarm_varid = -1;
 
 int lua_GMLua_ignoreArgc(lua_State* _pL)
 {
 	int Largc = lua_gettop(_pL); // get argument count.
-	if (Largc != 1)
+	if (Largc < 1)
 	{
-		return luaL_error(_pL, __FUNCTION__ " error: Invalid argument count, expected 1, got %d.", Largc);
+		return luaL_error(_pL, __FUNCTION__ " error: Invalid argument count, expected at least 1, got %d.", Largc);
 	}
 
 	if (lua_isboolean(_pL, 1))
@@ -258,77 +259,6 @@ RValue LtoR(lua_State* _pL, int a)
 	}
 }
 
-int lua_GMLua_getvar(lua_State* _pL)
-{
-	int Largc = lua_gettop(_pL); // get argument count.
-	if (Largc != 2)
-	{
-		return luaL_error(_pL, __FUNCTION__ " error: invalid argument count, expected 2, got %d.", Largc);
-	}
-
-	CInstanceBase* inst = nullptr;
-	lua_Integer varid = -1;
-	if (lua_islightuserdata(_pL, 1))
-	{
-		inst = reinterpret_cast<CInstanceBase*>(const_cast<void*>(lua_topointer(_pL, 1)));
-	}
-	else
-	{
-		return luaL_error(_pL, __FUNCTION__ " error: invalid type for argument `inst`, expected lightuserdata.");
-	}
-
-	if (lua_isinteger(_pL, 2))
-	{
-		varid = lua_tointeger(_pL, 2);
-	}
-	else
-	{
-		return luaL_error(_pL, __FUNCTION__ " error: invalid type for argument `varid`, expected integer.");
-	}
-
-	const RValue& ref(inst->GetYYVarRef(static_cast<int>(varid)));
-	return RValueToLua(_pL, ref);
-}
-
-int lua_GMLua_setvar(lua_State* _pL)
-{
-	int Largc = lua_gettop(_pL); // get argument count.
-	if (Largc != 3)
-	{
-		return luaL_error(_pL, __FUNCTION__ " error: invalid argument count, expected 3, got %d.", Largc);
-	}
-
-	CInstanceBase* inst = nullptr;
-	lua_Integer varid = -1;
-	if (lua_islightuserdata(_pL, 1))
-	{
-		inst = reinterpret_cast<CInstanceBase*>(const_cast<void*>(lua_topointer(_pL, 1)));
-	}
-	else
-	{
-		return luaL_error(_pL, __FUNCTION__ " error: invalid type for argument `inst`, expected lightuserdata.");
-	}
-
-	if (lua_isinteger(_pL, 2))
-	{
-		varid = lua_tointeger(_pL, 2);
-	}
-	else
-	{
-		return luaL_error(_pL, __FUNCTION__ " error: invalid type for argument `varid`, expected integer.");
-	}
-
-	RValue varval = LtoR(_pL, 3); // converts a Lua variable on the stack to an RValue.
-	if (varval.kind == VALUE_UNSET)
-	{
-		return luaL_error(_pL, __FUNCTION__ " error: passed value is of type UNSET, expected anything else.");
-	}
-
-	RValue& ref(inst->GetYYVarRef(static_cast<int>(varid)));
-	ref = varval;
-	return 0;
-}
-
 bool internal_getvarb(CInstanceBase* obj, int varind, int arrind, RValue& ret)
 {
 	if (varind < 10000)
@@ -360,80 +290,79 @@ bool internal_setvarb(CInstanceBase* obj, int varind, int arrind, RValue& val, l
 	}
 }
 
-int lua_GMLua_getvarb(lua_State* _pL)
+// inst,varTable,[arrayIndex]
+int lua_GMLua_getvar(lua_State* _pL)
 {
 	int Largc = lua_gettop(_pL); // get argument count.
 	if (Largc < 2)
 	{
-		return luaL_error(_pL, __FUNCTION__ " error: expected at least 2 arguments, got %d.", Largc);
+		return luaL_error(_pL, __FUNCTION__ " error: invalid argument count, expected at least 2, got %d.", Largc);
 	}
 
 	CInstanceBase* inst = nullptr;
-	lua_Integer varid = -1;
-	int iVarind = -1;
-	bool direct = false;
-	lua_Integer arrIndex = ARRAY_INDEX_NO_INDEX;
-	if (lua_islightuserdata(_pL, 1))
+	int varId = -1;
+	bool isBuiltin = false;
+	int arrIndex = ARRAY_INDEX_NO_INDEX;
+
+	if (lua_isuserdata(_pL, 1))
 	{
-		inst = reinterpret_cast<CInstanceBase*>(const_cast<void*>(lua_topointer(_pL, 1)));
+		CInstance** luaInst = reinterpret_cast<CInstance**>(luaL_checkudata(_pL, 1, "__libLassebq_GMLInstance_metatable"));
+		if (luaInst == nullptr)
+		{
+			return luaL_error(_pL, __FUNCTION__ " error: argument `inst` is not a valid GMLInstance.");
+		}
+
+		//inst = reinterpret_cast<CInstanceBase*>(const_cast<void*>(lua_topointer(_pL, 1)));
+		inst = *luaInst;
 	}
 	else
 	{
 		return luaL_error(_pL, __FUNCTION__ " error: invalid type for argument `inst`, expected lightuserdata.");
 	}
 
-	if (lua_isinteger(_pL, 2))
+	if (lua_isuserdata(_pL, 2))
 	{
-		varid = lua_tointeger(_pL, 2);
+		LasseVar* v = reinterpret_cast<LasseVar*>(luaL_checkudata(_pL, 2, "__libLassebq_GMLVar_metatable"));
+		if (v == nullptr)
+		{
+			return luaL_error(_pL, __FUNCTION__ " error: argument `varid` is not a valid GMLVar.");
+		}
+
+		varId = v->index;
+		isBuiltin = v->isbuiltin;
 	}
 	else
 	{
-		return luaL_error(_pL, __FUNCTION__ " error: invalid type for argument `varid`, expected integer.");
+		return luaL_error(_pL, __FUNCTION__ " error: invalid type for argument `varid`, expected lightuserdata.");
 	}
 
-	if (Largc > 2)
+	if (isBuiltin)
 	{
-		if (lua_isboolean(_pL, 3))
+		if (Largc > 2)
 		{
-			direct = lua_toboolean(_pL, 3) == 1 ? true : false;
-		}
-		else
-		{
-			return luaL_error(_pL, __FUNCTION__ " error: invalid type for argument `direct`, expected boolean.");
-		}
-
-		if (Largc > 3)
-		{
-			if (lua_isinteger(_pL, 4))
+			if (lua_isinteger(_pL, 3))
 			{
-				arrIndex = lua_tointeger(_pL, 4);
+				arrIndex = static_cast<int>(lua_tointeger(_pL, 3));
 			}
 			else
 			{
-				return luaL_error(_pL, __FUNCTION__ " error: invalid type for argument `arrayIndex`, expected integer.");
+				return luaL_error(_pL, __FUNCTION__ " error: invalid type for argument `arrIndex`, expected integer.");
 			}
 		}
-	}
 
-	if (direct)
-	{
-		iVarind = static_cast<int>(varid);
+		RValue ret;
+		internal_getvarb(inst, varId, arrIndex, ret);
+		return RValueToLua(_pL, ret);
 	}
 	else
 	{
-		iVarind = g_Variables[varid]->val;
+		const RValue& ref(inst->GetYYVarRef(varId));
+		return RValueToLua(_pL, ref);
 	}
-
-	RValue ret;
-	
-	int iarrInd = static_cast<int>(arrIndex);
-	internal_getvarb(inst, iVarind, iarrInd, ret);
-
-	return RValueToLua(_pL, ret);
 }
 
-// inst,varid,value,[direct],[arrayindex]
-int lua_GMLua_setvarb(lua_State* _pL)
+// inst,varTable,value,[arrayindex]
+int lua_GMLua_setvar(lua_State* _pL)
 {
 	int Largc = lua_gettop(_pL); // get argument count.
 	if (Largc < 3)
@@ -441,80 +370,78 @@ int lua_GMLua_setvarb(lua_State* _pL)
 		return luaL_error(_pL, __FUNCTION__ " error: invalid argument count, expected at least 3, got %d.", Largc);
 	}
 
-	YYObjectBase* inst = nullptr;
-	lua_Integer varid = -1;
-	int iVarind = -1;
-	lua_Integer arrIndex = ARRAY_INDEX_NO_INDEX;
-	bool direct = false;
-	if (lua_islightuserdata(_pL, 1))
+	CInstanceBase* inst = nullptr;
+	int varId = -1;
+	int arrIndex = ARRAY_INDEX_NO_INDEX;
+	bool isBuiltin = false;
+
+	if (lua_isuserdata(_pL, 1))
 	{
-		inst = reinterpret_cast<YYObjectBase*>(const_cast<void*>(lua_topointer(_pL, 1)));
+		CInstance** luaInst = reinterpret_cast<CInstance**>(luaL_checkudata(_pL, 1, "__libLassebq_GMLInstance_metatable"));
+		if (luaInst == nullptr)
+		{
+			return luaL_error(_pL, __FUNCTION__ " error: argument `inst` is not a valid GMLInstance.");
+		}
+
+		//inst = reinterpret_cast<CInstanceBase*>(const_cast<void*>(lua_topointer(_pL, 1)));
+		inst = *luaInst;
+	}
+
+	if (lua_isuserdata(_pL, 2))
+	{
+		LasseVar* v = reinterpret_cast<LasseVar*>(luaL_checkudata(_pL, 2, "__libLassebq_GMLVar_metatable"));
+		if (v == nullptr)
+		{
+			return luaL_error(_pL, __FUNCTION__ " error: argument `varid` is not a valid GMLVar.");
+		}
+
+		varId = v->index;
+		isBuiltin = v->isbuiltin;
 	}
 	else
 	{
-		return luaL_error(_pL, __FUNCTION__ " error: invalid type for argument `inst`, expected lightuserdata.");
+		return luaL_error(_pL, __FUNCTION__ " error: invalid type for argument `varid`, expected lightuserdata.");
 	}
 
-	if (lua_isinteger(_pL, 2))
-	{
-		varid = lua_tointeger(_pL, 2);
-	}
-	else
-	{
-		return luaL_error(_pL, __FUNCTION__ " error: invalid type for argument `varid`, expected integer.");
-	}
-
-	RValue val = LtoR(_pL, 3);
-	if (val.kind == VALUE_UNSET)
+	RValue varval(LtoR(_pL, 3)); // converts a Lua variable on the stack to an RValue.
+	if (varval.kind == VALUE_UNSET)
 	{
 		return luaL_error(_pL, __FUNCTION__ " error: passed value is of type UNSET, expected anything else.");
 	}
 
-	if (Largc > 3)
+	if (isBuiltin)
 	{
-		if (lua_isboolean(_pL, 4))
+		if (Largc > 3)
 		{
-			direct = lua_toboolean(_pL, 4) == 1 ? true : false;
-		}
-		else
-		{
-			return luaL_error(_pL, __FUNCTION__ " error: invalid type for argument `direct`, expected boolean.");
-		}
-
-		if (Largc > 4)
-		{
-			if (lua_isinteger(_pL, 5))
+			if (lua_isinteger(_pL, 4))
 			{
-				arrIndex = lua_tointeger(_pL, 5);
+				arrIndex = static_cast<int>(lua_tointeger(_pL, 4));
 			}
 			else
 			{
-				return luaL_error(_pL, __FUNCTION__ " error: invalid type for argument `arrayIndex`, expected integer.");
+				return luaL_error(_pL, __FUNCTION__ " error: invalid argument type for argument `arrIndex`, expected integer.");
 			}
 		}
-	}
 
-	if (direct)
-	{
-		iVarind = static_cast<int>(varid);
+		internal_setvarb(inst, varId, arrIndex, varval, _pL);
+		return 0;
 	}
 	else
 	{
-		iVarind = g_Variables[varid]->val;
+		RValue& ref(inst->GetYYVarRef(static_cast<int>(varId)));
+		ref = varval;
 	}
-
-	int iArrind = static_cast<int>(arrIndex);
-	internal_setvarb(inst, iVarind, iArrind, val, _pL);
 
 	return 0;
 }
 
+const lua_Integer GM_global = -5l;
 const lua_Integer GM_noone = -4l;
 const lua_Integer GM_all = -3l;
 const lua_Integer GM_other = -2l;
 const lua_Integer GM_self = -1l;
 
-int lua_GMLua_instToPtr(lua_State* _pL)
+int lua_GMLua_inst(lua_State* _pL)
 {
 	int Largc = lua_gettop(_pL); // get argument count.
 	if (Largc != 1)
@@ -529,8 +456,9 @@ int lua_GMLua_instToPtr(lua_State* _pL)
 		{
 			case GM_noone: return luaL_error(_pL, __FUNCTION__ " error: instance id cannot be `noone`.");
 			case GM_all: return luaL_error(_pL, __FUNCTION__ " error: instance id cannot be `all`.");
-			case GM_self: lua_pushlightuserdata(_pL, g_Self); return 1;
-			case GM_other: lua_pushlightuserdata(_pL, g_Other); return 1;
+			case GM_self: return luaL_error(_pL, __FUNCTION__ " error: instance id cannot be `self`, use _pSelf.");
+			case GM_other: return luaL_error(_pL, __FUNCTION__ " error: instance id cannot be `other`, use _pOther.");
+			case GM_global: return luaL_error(_pL, __FUNCTION__ " error: instance id cannot be `global`, use _pGlobal.");
 			default: break;
 		}
 
@@ -546,7 +474,10 @@ int lua_GMLua_instToPtr(lua_State* _pL)
 
 			if (inst->i_id == id)
 			{
-				lua_pushlightuserdata(_pL, inst);
+				CInstance** luaSelf = reinterpret_cast<CInstance**>(lua_newuserdata(lS, sizeof(CInstance**)));
+				*luaSelf = inst;
+				luaL_getmetatable(lS, "__libLassebq_GMLInstance_metatable");
+				lua_setmetatable(lS, -2);
 				return 1;
 			}
 
@@ -575,32 +506,30 @@ int lua_GMLua_script_cclosure(lua_State* _pL) {
 
 void RegisterFunctions(lua_State* _pL)
 {
+	char funcName[128]{ '\0' };
 	for (int i = 0; i < *g_RFunctionTableLen; i++)
 	{
 		const RFunction& rf = (*g_RFunctionTable)[i];
-		std::string rfname(rf.f_name, 64);
+		memset(funcName, 0, sizeof(funcName));
+		strcpy_s(funcName, sizeof(funcName), "GML_");
+		if (strncat_s(funcName, sizeof(funcName), rf.f_name, sizeof(rf.f_name)) == EINVAL)
+			abort();
 
 		// skip invalid or weird functions such as @@NewGMLArray@@ or $PRINT.
-		if (rfname.rfind('@') != std::string::npos
-			|| rfname.rfind(' ') != std::string::npos
-			|| rfname.rfind('$') != std::string::npos) continue;
-
-		// do the magic.
-		std::string lN("GML_"); // append "GML_" prefix to the function name.
-		lN += rfname;
+		if (strchr(funcName, '@') != nullptr
+		|| strchr(funcName, ' ') != nullptr
+		|| strchr(funcName, '$') != nullptr) continue;
 
 		lua_pushinteger(_pL, i);
 		lua_pushinteger(_pL, rf.f_argnumb);
 		lua_pushcclosure(_pL, lua_GMLua_cclosure, 2);
-		lua_setglobal(_pL, lN.c_str());
+		lua_setglobal(_pL, funcName);
 	}
 
 	// Custom variable management functions.
 	lua_register(_pL, "GMLua_getvar", lua_GMLua_getvar);
 	lua_register(_pL, "GMLua_setvar", lua_GMLua_setvar);
-	lua_register(_pL, "GMLua_getvarb", lua_GMLua_getvarb);
-	lua_register(_pL, "GMLua_setvarb", lua_GMLua_setvarb);
-	lua_register(_pL, "GMLua_instToPtr", lua_GMLua_instToPtr);
+	lua_register(_pL, "GMLua_inst", lua_GMLua_inst);
 	lua_register(_pL, "GMLua_ignoreArgc", lua_GMLua_ignoreArgc);
 }
 
@@ -686,7 +615,7 @@ bool LuaChkArgs(const int gmargc, int luaargc, lua_State* _pL)
 
 	if (gmargc != luaargc)
 	{
-		luaL_error(_pL, __FUNCTION__ " error: invalid argument count, expected %d, got %d.", gmargc, luaargc);
+		luaL_error(_pL, __FUNCTION__ " error: invalid argument count for a GM call, expected %d, got %d.", gmargc, luaargc);
 		return false;
 	}
 	else
@@ -738,34 +667,78 @@ int DoLuaScriptCall(lua_State* _pL, const int entryId)
 void RegisterVarids(lua_State* _pL)
 {
 	char buf[256]{ '\0' };
+
+	// make us a type of sorts, which will be assigned to every GMLVar object.
+	luaL_newmetatable(_pL, "__libLassebq_GMLVar_metatable");
+	lua_pop(_pL, 1);
+
+	// cool and good methods.
+	luaL_newmetatable(_pL, "__libLassebq_GMLInstance_metatable");
+	luaL_dostring(_pL, "return (function(t,k) return GMLua_getvar(t, GMLua_vars[k]) end)");
+	lua_setfield(_pL, -2, "__index");
+	luaL_dostring(_pL, "return (function(t,k,v) GMLua_setvar(t, GMLua_vars[k], v) end)");
+	lua_setfield(_pL, -2, "__newindex");
+	lua_pop(_pL, 1);
+
+	// lookup table
+	lua_newtable(_pL);
+	lua_setglobal(_pL, "GMLua_vars");
+
+	// custom vars
 	for (int i = 0; true; i++)
 	{
-		YYVAR* v = g_Variables[i];
-		if (v == nullptr) break;
+		if (g_Variables[i] == nullptr) break;
 		memset(buf, 0, sizeof(buf));
 		if (strcat_s(buf, sizeof(buf), "GMLVar_") == EINVAL) abort();
-		if (strcat_s(buf, sizeof(buf), v->pName) == EINVAL) abort();
-		lua_pushinteger(_pL, i);
+		if (strcat_s(buf, sizeof(buf), g_Variables[i]->pName) == EINVAL) abort();
+
+		LasseVar* v = reinterpret_cast<LasseVar*>(lua_newuserdata(_pL, sizeof(v)));
+		v->index = i;
+		v->isbuiltin = false;
+
+		luaL_getmetatable(_pL, "__libLassebq_GMLVar_metatable");
+		lua_setmetatable(_pL, -2);
 		lua_setglobal(_pL, buf);
+
+		lua_getglobal(_pL, "GMLua_vars");
+		lua_getglobal(_pL, buf);
+		lua_setfield(_pL, -2, g_Variables[i]->pName);
+		lua_pop(_pL, 1);
 	}
 
-	lua_pushlightuserdata(_pL, *g_pGlobal);
-	lua_setglobal(_pL, "_pGlobal");
-}
-
-void RegisterBuiltinVarids(lua_State * _pL)
-{
-	char buf[256]{ '\0' };
+	// builtin vars.
 	for (int i = 0; i < 500; i++)
 	{
 		if (g_BuiltinVars[i].f_name == nullptr || g_BuiltinVars[i].f_getroutine == nullptr) break;
-
 		memset(buf, 0, sizeof(buf));
-		if (strcat_s(buf, sizeof(buf), "GMLBVar_") == EINVAL) abort();
+		if (strcat_s(buf, sizeof(buf), "GMLVar_") == EINVAL) abort();
 		if (strcat_s(buf, sizeof(buf), g_BuiltinVars[i].f_name) == EINVAL) abort();
-		lua_pushinteger(_pL, i);
+
+		if (strcmp(g_BuiltinVars[i].f_name, "alarm") == 0)
+			alarm_varid = i;
+
+		LasseVar* v = reinterpret_cast<LasseVar*>(lua_newuserdata(_pL, sizeof(v)));
+		v->index = i;
+		v->isbuiltin = true;
+
+		luaL_getmetatable(_pL, "__libLassebq_GMLVar_metatable");
+		lua_setmetatable(_pL, -2);
 		lua_setglobal(_pL, buf);
+
+		lua_getglobal(_pL, "GMLua_vars");
+		lua_getglobal(_pL, buf);
+		lua_setfield(_pL, -2, g_BuiltinVars[i].f_name);
+		lua_pop(_pL, 1);
 	}
+
+	CInstance** luaGlobal = reinterpret_cast<CInstance**>(lua_newuserdata(lS, sizeof(CInstance**)));
+
+	// this is wrong, will likely break stuff, but who cares.
+	*luaGlobal = reinterpret_cast<CInstance*>(*g_pGlobal);
+
+	luaL_getmetatable(lS, "__libLassebq_GMLInstance_metatable");
+	lua_setmetatable(lS, -2);
+	lua_setglobal(_pL, "_pGlobal");
 }
 
 void InitLua(void)
@@ -776,6 +749,5 @@ void InitLua(void)
 	RegisterAssets(lS);
 	RegisterFunctions(lS);
 	RegisterVarids(lS);
-	RegisterBuiltinVarids(lS);
 	RegisterScripts(lS);
 }
