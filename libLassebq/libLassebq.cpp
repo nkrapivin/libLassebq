@@ -13,6 +13,8 @@
 #include "GMLConstants.h"
 #include "GMLua.h"
 #include "GameSpecific.h"
+#include "Scheduler.h"
+#include "ScriptHooker.h"
 #include <WinCon.h>
 #include <fstream>
 #include <shellapi.h>
@@ -21,13 +23,20 @@
 
 HMODULE exeBase = nullptr;
 CHash<CObjectGM>** g_ObjectHashTable = nullptr;
-int g_GMLScriptsSize;
-int g_VariablesSize;
+int g_GMLScriptsSize = -1;
+int g_VariablesSize = -1;
+int g_BuiltinVariablesSize = -1;
+int g_TotalVarSize = -1;
 
 std::unordered_map<std::string, int> fR; // runtime funcs
 std::unordered_map<std::string, int> fS; // script
 std::unordered_map<std::string, int> fV; // var
 std::unordered_map<std::string, int> fB; // builtin
+
+char* llbq_p1 = nullptr;
+char* llbq_p2 = nullptr;
+char* llbq_p3 = nullptr;
+char* llbq_p4 = nullptr;
 
 // <object_index, <event_key, function_pointer>>
 std::unordered_map<int, std::unordered_map<unsigned long long, void*>> EventPatchMap;
@@ -43,11 +52,23 @@ GetEvRecurs GetEventRecursive = nullptr;
 InsertEv InsertEvent = nullptr;
 
 void lassebq_find_bvars() {
+	g_TotalVarSize = g_VariablesSize; // first, we start from how many instance vars we have.
 	for (int i = 0; i < 500; i++)
 	{
 		const RVariableRoutine& rvr = g_BuiltinVars[i];
-		if (rvr.f_getroutine == nullptr || rvr.f_name == nullptr) break;
+		if (rvr.f_getroutine == nullptr || rvr.f_name == nullptr)
+		{
+			g_BuiltinVariablesSize = i;
+			break;
+		}
+
 		fB[rvr.f_name] = i;
+		// if we already have such builtin in the list, we do nothing
+		// otherwise, if it's a new builtin, we increment the size.
+		if (fV.find(rvr.f_name) == fV.end())
+		{
+			g_TotalVarSize++;
+		}
 	}
 }
 
@@ -55,9 +76,9 @@ void lassebq_free_result() {
 	Result.~RValue();
 }
 
-int lassebq_get_bvar(const std::string name) {
+int lassebq_get_bvar(const std::string& name) {
 	int ind = fB[name];
-	if (ind < 0 || ind > 500) abort();
+	if (ind < 0 || ind > 500 - 1) abort();
 	lassebq_free_result();
 	g_BuiltinVars[ind].f_getroutine(g_Self, ARRAY_INDEX_NO_INDEX, &Result);
 	return Result.asInt32();
@@ -75,7 +96,7 @@ void lassebq_callr(std::string id, const RValueList& args = { })
 	CallRFunction(fR[id], Result, args);
 }
 
-void lassebq_calls(std::string id, bool isObjectEvent, const RValueList& args = { })
+void lassebq_calls(const std::string& id, bool isObjectEvent, const RValueList& args = { })
 {
 	lassebq_free_result();
 	if (fR.find(id) == fR.end())
@@ -87,52 +108,104 @@ void lassebq_calls(std::string id, bool isObjectEvent, const RValueList& args = 
 	CallScriptFunction(fS[id], Result, args, isObjectEvent);
 }
 
+int ALT_CreateDsMap(int _num, ...)
+{
+	lassebq_callr("ds_map_create");
+	return Result.asInt32();
+}
+
+bool ALT_DsMapAddString(int _map, const char* _key, const char* _value)
+{
+	lassebq_callr("ds_map_add", { _map, _key, _value });
+	return Result.asBoolean();
+}
+
+bool ALT_DsMapAddDouble(int _map, const char* _key, double _value)
+{
+	lassebq_callr("ds_map_add", { _map, _key, _value });
+	return Result.asBoolean();
+}
+
+typedef void(*DispatchT)(int _map, int _eventnum);
+DispatchT DispatchAsyncInternal = nullptr;
+
+void ALT_DispatchAsync(int _map, int _eventnum)
+{
+	DispatchAsyncInternal(_map, _eventnum);
+}
+
 void lassebq_doLua(CInstance* _pSelf, CInstance* _pOther, const char* _pLFName) // pointerLuaFunctionName
 {
-	int r = LUA_OK; const char* errmsg = nullptr;
+	int r = LUA_OK; const char* errmsg = nullptr; int type = LUA_TNONE; int a = -1;
 	for (const std::string& script : Lscripts)
 	{
-		r = luaL_dofile(lS, script.c_str());
-		if (r == LUA_OK)
+		if (CheckFileOk(script))
 		{
-			lua_getglobal(lS, _pLFName);
-			if (lua_isfunction(lS, -1)) // if the function exists...
+			r = luaL_dofile(lS, script.c_str());
+			if (r == LUA_OK)
 			{
-				// push pSelf/pOther as arguments to the function call...
-				// TODO: wrappers?
-				CInstance** luaSelf = reinterpret_cast<CInstance**>(lua_newuserdata(lS, sizeof(CInstance**)));
-				*luaSelf = _pSelf;
-				luaL_getmetatable(lS, "__libLassebq_GMLInstance_metatable");
-				lua_setmetatable(lS, -2);
-				CInstance** luaOther = reinterpret_cast<CInstance**>(lua_newuserdata(lS, sizeof(CInstance**)));
-				*luaOther = _pOther;
-				luaL_getmetatable(lS, "__libLassebq_GMLInstance_metatable");
-				lua_setmetatable(lS, -2);
-
-				int lArgc = 2;
-				int rnum = 0;
-
-				// do the luacall
-				r = lua_pcall(lS, lArgc, rnum, 0);
-				if (r != LUA_OK)
+				a = lua_gettop(lS);
+				if (a > 0 && lua_istable(lS, -1))
 				{
-					errmsg = lua_tostring(lS, -1);
-					if (g_ThrowErrors)
+					type = lua_getfield(lS, -1, _pSelf->m_pObject->m_pName); // table[object_get_name]
+					if (type == LUA_TTABLE) // if the function table exists...
 					{
-						YYError("Lua Error: lua_pcall failed with result %d in function %s.\r\nDetails:\r\n%s\r\n", r, _pLFName, errmsg);
+						type = lua_getfield(lS, -1, _pLFName); // ftable[_pLFName]
+						if (type == LUA_TFUNCTION)
+						{
+							// push pSelf/pOther as arguments to the function call...
+							// TODO: wrappers?
+							CInstance** luaSelf = reinterpret_cast<CInstance**>(lua_newuserdata(lS, sizeof(CInstance*)));
+							*luaSelf = _pSelf;
+							luaL_getmetatable(lS, "__libLassebq_GMLInstance_metatable");
+							lua_setmetatable(lS, -2);
+							CInstance** luaOther = reinterpret_cast<CInstance**>(lua_newuserdata(lS, sizeof(CInstance*)));
+							*luaOther = _pOther;
+							luaL_getmetatable(lS, "__libLassebq_GMLInstance_metatable");
+							lua_setmetatable(lS, -2);
+
+							// renew _pGlobal
+							RenewGlobal(lS);
+
+							int lArgc = 2; // argument count
+							int rNumb = 0; // returned values count
+
+							// do the luacall
+							r = lua_pcall(lS, lArgc, rNumb, 0);
+							if (r != LUA_OK)
+							{
+								errmsg = lua_tostring(lS, -1);
+								if (g_ThrowErrors)
+								{
+									YYError("Lua Error: lua_pcall failed with result %d in function %s.\r\nDetails:\r\n%s\r\n", r, _pLFName, errmsg);
+								}
+								lua_pop(lS, 1);
+							}
+						}
+						lua_pop(lS, 1);
+					}
+					else if (type != LUA_TNIL && type != LUA_TNONE) // if the value is defined, but not nil.
+					{
+						lua_pop(lS, 1);
+						if (g_ThrowErrors)
+						{
+							YYError("Lua Error: lua_isfunction failed, %s is defined and is NOT a Lua function.\r\n", _pLFName);
+						}
 					}
 					lua_pop(lS, 1);
+					// else, the value is nil or not defined, we may simply ignore that. this may happen.
+					// I want to let people remove functions from scripts on-the-fly if they want to
 				}
 			}
-		}
-		else
-		{
-			errmsg = lua_tostring(lS, -1);
-			if (g_ThrowErrors)
+			else
 			{
-				YYError("Lua Error: luaL_dofile failed with result %d in function %s.\r\nDetails:\r\n%s\r\n", r, _pLFName, errmsg);
+				errmsg = lua_tostring(lS, -1);
+				if (g_ThrowErrors)
+				{
+					YYError("Lua Error: luaL_dofile failed with result %d in function %s.\r\nDetails:\r\n%s\r\n", r, _pLFName, errmsg);
+				}
+				lua_pop(lS, 1);
 			}
-			lua_pop(lS, 1);
 		}
 	}
 }
@@ -147,20 +220,13 @@ void lassebq_lua_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 	g_Self = _pSelf;
 	g_Other = _pOther;
 	
+	
 	int event_type = lassebq_get_bvar("event_type");
 	int event_numb = lassebq_get_bvar("event_number");
 	CEvent* ev = GetEventRecursive(_pSelf->m_pObject, event_type, event_numb);
+
 	YY_STACKTRACE_FUNC_ENTRY(ev->e_code->i_pName, 0);
-
-	char luaFuncName[256]{ '\0' };
-	// "objectname_eventname"
-	snprintf(luaFuncName, sizeof(luaFuncName), "%s_%s",
-		_pSelf->m_pObject->m_pName,
-		mapOfEvents[lassebq_evKey(event_type, event_numb)].c_str()
-	);
-
-	YY_STACKTRACE_LINE(1);
-	lassebq_doLua(_pSelf, _pOther, luaFuncName);
+	lassebq_doLua(_pSelf, _pOther, mapOfEvents[makeevkey(event_type, event_numb)].c_str());
 }
 
 #ifndef DITTO_WIN_STEAM
@@ -219,6 +285,17 @@ void lassebq_luaPatch_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 	int event_type = lassebq_get_bvar("event_type");
 	int event_numb = lassebq_get_bvar("event_number");
 	unsigned long long evKey = lassebq_evKey(event_type, event_numb);
+	if (event_type == ev_other && event_numb == ev_save_load)
+	{
+		for (int b = 0; true; b++)
+		{
+			lassebq_callr("buffer_exists", { b });
+			if (!Result.asBoolean()) break;
+			lassebq_callr("buffer_save", { b, std::to_string(b) + "_BEFORE_buf.dat" });
+		}
+	}
+
+
 	GML_ObjectEvent origptr = reinterpret_cast<GML_ObjectEvent>
 		(EventPatchMap[_pSelf->m_pObject->m_ID][evKey]);
 	origptr(_pSelf, _pOther);
@@ -228,14 +305,7 @@ void lassebq_luaPatch_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 	// Why? When the original event returns, it will call Stacktrace's destructor, thus null-ing it
 	// So we need to make a new instance of the stacktrace :/
 	YY_STACKTRACE_FUNC_ENTRY(ev->e_code->i_pName, 0);
-	char luaFuncName[256]{ '\0' };
-	// "objectname_eventname"
-	snprintf(luaFuncName, sizeof(luaFuncName), "%s_%s",
-		_pSelf->m_pObject->m_pName,
-		mapOfEvents[evKey].c_str()
-	);
-	YY_STACKTRACE_LINE(1);
-	lassebq_doLua(_pSelf, _pOther, luaFuncName);
+	lassebq_doLua(_pSelf, _pOther, mapOfEvents[evKey].c_str());
 }
 
 CObjectGM *lassebq_find_obj(int obj_index)
@@ -295,59 +365,70 @@ void lassebq_patchObject()
 {
 	std::cout << "Trying to patch lassebq obj..." << std::endl;
 
-	int r;
+	int r, a, type;
 	char buf[256]{ '\0' };
 	for (const std::string& fn : Lscripts)
 	{
 		r = luaL_dofile(lS, fn.c_str());
 		if (r == LUA_OK)
 		{
-			for (int i = 0; true; i++)
+			a = lua_gettop(lS);
+			if (a > 0 && lua_istable(lS, -1))
 			{
-#ifndef DITTO_WIN_STEAM
-				if (i == EtoI(GameObjects::obj_speedrun_results_screen))
+				for (int i = 0; true; i++)
 				{
-					continue; // ignore any event replaces for obj_speedrun_results_screen.
-				}
+#ifndef DITTO_WIN_STEAM
+					if (i == EtoI(GameObjects::obj_speedrun_results_screen))
+					{
+						continue; // ignore any event replaces for obj_speedrun_results_screen.
+					}
 #endif
 
-				CObjectGM* cogm = lassebq_find_obj(i);
-				if (cogm == nullptr) break;
-				const char* str = cogm->m_pName;
-
-				for(const std::pair<unsigned long long, std::string>& pair : mapOfEvents)
-				{
-					memset(buf, 0, sizeof(buf));
-					snprintf(buf, sizeof(buf), "%s_%s", str, pair.second.c_str());
-					lua_getglobal(lS, buf);
-					if (lua_isfunction(lS, -1))
+					CObjectGM* cogm = lassebq_find_obj(i);
+					if (cogm == nullptr) break;
+					const char* const str = cogm->m_pName;
+					type = lua_getfield(lS, -1, str); // tableofObjects[objectName]
+					if (type == LUA_TTABLE) // ~= nil
 					{
-						int type = static_cast<int>(pair.first >> 32ull);
-						int subtype = static_cast<int>(pair.first & 0xFFFFFFFFull);
-						CEvent* origev = GetEventRecursive(cogm, type, subtype);
-						if (origev != nullptr)
+						for (const std::pair<unsigned long long, std::string>& pair : mapOfEvents)
 						{
-							// Don't do anything if we've already added our lua stub.
-							if (origev->e_code->i_pFunc->ptr == lassebq_lua_GMLRoutine
-							||  origev->e_code->i_pFunc->ptr == lassebq_luaPatch_GMLRoutine)
-								continue;
+							type = lua_getfield(lS, -1, pair.second.c_str());
+							lua_pop(lS, 1);
+							if (type == LUA_TFUNCTION)
+							{
+								int type = static_cast<int>(pair.first >> 32ull);
+								int subtype = static_cast<int>(pair.first & 0xFFFFFFFFull);
+								CEvent* origev = GetEventRecursive(cogm, type, subtype);
+								if (origev != nullptr)
+								{
+									// Don't do anything if we've already added our lua stub.
+									if (origev->e_code->i_pFunc->ptr == lassebq_lua_GMLRoutine
+										|| origev->e_code->i_pFunc->ptr == lassebq_luaPatch_GMLRoutine)
+										continue;
 
-							std::cout << "AN EVENT " << buf << " ALREADY EXISTS! brb replacing..." << std::endl;
-							EventPatchMap[i][pair.first] = origev->e_code->i_pFunc->ptr; // save the original function.
-							origev->e_code->i_pFunc->ptr = lassebq_luaPatch_GMLRoutine;
-							continue;
-						}
-						else
-						{
-							memset(buf, 0, sizeof(buf));
-							snprintf(buf, sizeof(buf), "libLassebq_%s_%s", str, pair.second.c_str());
-							std::cout << "Adding event " << buf << "..." << std::endl;
-							lassebq_addEvent(cogm, type, subtype, buf, lassebq_lua_GMLRoutine);
+									std::cout << "An event " << str << ":" << pair.second << " is already defined, Lua code will execute after it." << std::endl;
+									EventPatchMap[i][pair.first] = origev->e_code->i_pFunc->ptr; // save the original function.
+									origev->e_code->i_pFunc->ptr = lassebq_luaPatch_GMLRoutine;
+									continue;
+								}
+								else
+								{
+									memset(buf, 0, sizeof(buf));
+									snprintf(buf, sizeof(buf), "lua_Object_%s_%s", str, pair.second.c_str());
+									std::cout << "Adding new event " << buf << "..." << std::endl;
+									lassebq_addEvent(cogm, type, subtype, buf, lassebq_lua_GMLRoutine);
+								}
+							}
 						}
 					}
 					lua_pop(lS, 1);
 				}
+				lua_pop(lS, 1);
 			}
+		}
+		else
+		{
+			std::cout << "Failed to execute script " << fn << " it will be ignored. ret=" << r << std::endl;
 		}
 	}
 
@@ -383,16 +464,31 @@ void lassebq_make_obj_liblassebq()
 #endif
 }
 
+#ifdef DITTO_WIN_STEAM
+void ditto()
+{
+	int i = fS["gml_Script_get_key_array"];
+	GML_Script gs = reinterpret_cast<GML_Script>(g_GMLScripts[i].ptr);
+	SH_hookGMLScript(gs, SH_argumentInspector);
+}
+#endif
+
 void lassebq_initYYC()
 {
+	sch_begin();
+
 	InitGMLuaConfig();
 	if (!g_NoConsole)
 	{
 		AllocConsoleQuick();
 
 		std::cout << "libLassebq by nkrapivindev, built for project " << PROJECT_NAME << std::endl;
+		std::cout << "Build DateTime: " << __DATE__ << " " << __TIME__ << std::endl;
 		std::cout << "This thing is experimental, please report any bugs to nik#5351 on Discord." << std::endl;
 		std::cout << "Random quote: " << GetRandomQuote() << std::endl;
+#ifdef KZ_105_STEAM
+		std::cout << "KZ_105_STEAM, Katana Zero v1.0.5 Windows Steam" << std::endl;
+#endif
 #ifdef KZ_105_GOG
 		std::cout << "KZ_105_GOG, Katana Zero v1.0.5 Windows GOG" << std::endl;
 #endif
@@ -400,12 +496,23 @@ void lassebq_initYYC()
 		std::cout << "DITTO_WIN_STEAM, The Swords of Ditto 1.17.05-205 STM" << std::endl;
 #endif
 		std::cout << std::endl;
-		if (g_ThrowErrors) std::cout << "Will ignore Lua errors, this is VERY evil and unstable!" << std::endl;
+		if (!g_ThrowErrors) std::cout << "Will ignore Lua errors, this is VERY evil and unstable!" << std::endl;
 		if (g_AddCollisionEvents) std::cout << "Collision event name generation enabled, loading times will be WAY slower." << std::endl;
 	}
 
 	exeBase = GetModuleHandleW(nullptr);
 	uintptr_t exeAsUint = reinterpret_cast<uintptr_t>(exeBase);
+
+	if (!llbq_p1 || !llbq_p2 || !llbq_p3 || !llbq_p4)
+	{
+		llbq_p1 = reinterpret_cast<char*>(ALT_DispatchAsync);
+		llbq_p2 = reinterpret_cast<char*>(ALT_CreateDsMap);
+		llbq_p3 = reinterpret_cast<char*>(ALT_DsMapAddDouble);
+		llbq_p4 = reinterpret_cast<char*>(ALT_DsMapAddString);
+		DispatchAsyncInternal = reinterpret_cast<DispatchT>(exeAsUint + DispatchAsync_Addr);
+		std::cout << "Whatever game you're using has initialized LLBQ differently!" << std::endl;
+		std::cout << "I appreciate your effort, so libLassebq will provide it's replacement callbacks =^-^=" << std::endl;
+	}
 
 	g_Variables = reinterpret_cast<YYVAR**>(exeAsUint + Variable_Addr);
 	for (int i = 0; true; i++)
@@ -441,7 +548,9 @@ void lassebq_initYYC()
 	YYCreateString = reinterpret_cast<YYCreStr>(exeAsUint + YYCreateString_Addr);
 	YYStrDup = reinterpret_cast<YYStrDupT>(exeAsUint + YYStrDup_Addr);
 	YYFree = reinterpret_cast<YYFreeT>(exeAsUint + YYFree_Addr);
+	Code_Variable_FindAlloc_Slot_From_Name = reinterpret_cast<AllocNewVarSlotT>(exeAsUint + AllocNewVarSlot_Addr);
 	g_Self = nullptr;
+	g_Other = nullptr;
 	SYYStackTrace::s_pStart = reinterpret_cast<SYYStackTrace**>(exeAsUint + YYSTraceStart_Addr);
 
 	// remove this later
@@ -488,6 +597,12 @@ void lassebq_initYYC()
 	std::cout << "Applying " << PROJECT_NAME << " specific patches..." << std::endl;
 	ApplyGameSpecificPatches(exeAsUint);
 
+	std::cout << "Builtin variables " << g_BuiltinVariablesSize << std::endl;
+	std::cout << "Instance variables " << g_VariablesSize << std::endl;
+	std::cout << "Total unique variables " << g_TotalVarSize << std::endl;
+
+	ditto();
+
 	std::cout << "All Done, proceeding to the game..." << std::endl;
 	std::cout << std::endl;
 
@@ -510,11 +625,18 @@ funcR lassebq_shutdown()
 {
 	// TODO: do something more complicated than this?
 	lua_close(lS);
+	FreeConsole();
+	sch_end();
+	SH_quitDetours();
 	return 1.0;
 }
 
 funcV RegisterCallbacks(char* p1, char* p2, char* p3, char* p4)
 {
 	// do the job.
+	llbq_p1 = p1;
+	llbq_p2 = p2;
+	llbq_p3 = p3;
+	llbq_p4 = p4;
 	lassebq_initYYC();
 }

@@ -1,14 +1,15 @@
 #include "Data.h"
 
-const unsigned long long iii = 2ull | 3ull << 0x20ull;
-const unsigned long long ity = iii >> 0x20ull;
-const unsigned long long ist = ity & iii;
+/*  A table of event indexes|friendly event names.
+ *  This hashmap is not constant because 'Collision_' events may be added to it.
+ */
 
 #pragma warning( push )
 #pragma warning( disable : 4244 )
 std::unordered_map<unsigned long long, std::string> mapOfEvents = {
 	{ makeevkey(ev_create, 0), "Create" },
 	{ makeevkey(ev_destroy, 0), "Destroy" },
+	{ makeevkey(ev_pre_create, 0), "PreCreate" },
 	{ makeevkey(ev_clean_up, 0), "CleanUp" },
 
 	{ makeevkey(ev_step, ev_step_normal), "Step" },
@@ -88,6 +89,49 @@ std::unordered_map<unsigned long long, std::string> mapOfEvents = {
 	{ makeevkey(ev_other, ev_user13), "UserEvent13" },
 	{ makeevkey(ev_other, ev_user14), "UserEvent14" },
 	{ makeevkey(ev_other, ev_user15), "UserEvent15" },
+
+	{ makeevkey(ev_other, ev_audio_playback), "AsyncAudioPlayback" },
+	{ makeevkey(ev_other, ev_audio_recording), "AsyncAudioRecording" },
+	{ makeevkey(ev_other, ev_cloud), "AsyncCloud" },
+	{ makeevkey(ev_other, ev_dialog), "AsyncDialog" },
+	{ makeevkey(ev_other, ev_async), "AsyncHTTP" },
+	{ makeevkey(ev_other, ev_iap), "AsyncIAP" },
+	{ makeevkey(ev_other, ev_image_loaded), "AsyncImageLoaded" },
+	{ makeevkey(ev_other, ev_sound_loaded), "AsyncSoundLoaded" },
+	{ makeevkey(ev_other, ev_networking), "AsyncNetworking" },
+	{ makeevkey(ev_other, ev_push_notification), "AsyncPushNotification" },
+	{ makeevkey(ev_other, ev_save_load), "AsyncSaveLoad" },
+	{ makeevkey(ev_other, ev_social), "AsyncSocial" }, // also used by native extensions.
+	{ makeevkey(ev_other, ev_steam), "AsyncSteam" }, // workshop events.
+	{ makeevkey(ev_other, ev_system_event), "AsyncSystem" },
+
+	// Gesture events are GMS 2 only:
+	{ makeevkey(ev_gesture, ev_gesture_tap), "GestureTap" },
+	{ makeevkey(ev_gesture, ev_gesture_double_tap), "GestureDoubleTap" },
+	{ makeevkey(ev_gesture, ev_gesture_drag_start), "GestureDragStart" },
+	{ makeevkey(ev_gesture, ev_gesture_dragging), "GestureDragging" },
+	{ makeevkey(ev_gesture, ev_gesture_drag_end), "GestureDragEnd" },
+	{ makeevkey(ev_gesture, ev_gesture_flick), "GestureFlick" },
+	{ makeevkey(ev_gesture, ev_gesture_pinch_start), "GesturePinchStart" },
+	{ makeevkey(ev_gesture, ev_gesture_pinch_in), "GesturePinchIn" },
+	{ makeevkey(ev_gesture, ev_gesture_pinch_out), "GesturePinchOut" },
+	{ makeevkey(ev_gesture, ev_gesture_pinch_end), "GesturePinchEnd" },
+	{ makeevkey(ev_gesture, ev_gesture_rotate_start), "GestureRotateStart" },
+	{ makeevkey(ev_gesture, ev_gesture_rotating), "GestureRotating" },
+	{ makeevkey(ev_gesture, ev_gesture_rotate_end), "GestureRotateEnd" },
+	{ makeevkey(ev_gesture, ev_global_gesture_tap), "GestureGlobalTap" },
+	{ makeevkey(ev_gesture, ev_global_gesture_double_tap), "GestureGlobalDoubleTap" },
+	{ makeevkey(ev_gesture, ev_global_gesture_drag_start), "GestureGlobalDragStart" },
+	{ makeevkey(ev_gesture, ev_global_gesture_dragging), "GestureGlobalDragging" },
+	{ makeevkey(ev_gesture, ev_global_gesture_drag_end), "GestureGlobalDragEnd" },
+	{ makeevkey(ev_gesture, ev_global_gesture_flick), "GestureGlobalFlick" },
+	{ makeevkey(ev_gesture, ev_global_gesture_pinch_start), "GestureGlobalPinchStart" },
+	{ makeevkey(ev_gesture, ev_global_gesture_pinch_in), "GestureGlobalPinchIn" },
+	{ makeevkey(ev_gesture, ev_global_gesture_pinch_out), "GestureGlobalPinchOut" },
+	{ makeevkey(ev_gesture, ev_global_gesture_pinch_end), "GestureGlobalPinchEnd" },
+	{ makeevkey(ev_gesture, ev_global_gesture_rotate_start), "GestureGlobalRotateStart" },
+	{ makeevkey(ev_gesture, ev_global_gesture_rotating), "GestureGlobalRotating" },
+	{ makeevkey(ev_gesture, ev_global_gesture_rotate_end), "GestureGlobalRotateEnd" },
 
 	{ makeevkey(ev_draw, 0), "Draw" },
 	{ makeevkey(ev_draw, ev_gui), "DrawGUI" },

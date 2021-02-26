@@ -1,6 +1,5 @@
 #pragma once
 #include "stdafx.h"
-#include "pcre\include\pcre.h"
 #include "RValue.h"
 #include "SYYStackTrace.h"
 #include "GMLFuncs.h"
@@ -95,8 +94,8 @@ class YYObjectBase : public CInstanceBase {
 	YYObjectBase* m_pNextObject;
 	YYObjectBase* m_pPrevObject;
 	YYObjectBase* m_prototype;
-	pcre* m_pcre;
-	pcre_extra* m_pcreExtra;
+	void* m_pcre;
+	void* m_pcreExtra;
 	char* m_class;
 	GetOwnPropertyFunc m_getOwnProperty;
 	DeletePropertyFunc m_deleteProperty;
@@ -295,3 +294,11 @@ typedef void(*YYErrorT)(const char* _pFormat, ...);
 extern YYErrorT YYError;
 extern RValue Result;
 void lassebq_callr(std::string id, const RValueList& args);
+extern int g_VariablesSize;
+extern int g_TotalVarSize;
+extern int g_BuiltinVariablesSize;
+
+extern char* llbq_p1;
+extern char* llbq_p2;
+extern char* llbq_p3;
+extern char* llbq_p4;

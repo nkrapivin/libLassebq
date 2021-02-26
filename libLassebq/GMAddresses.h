@@ -1,7 +1,7 @@
 #pragma once
 
 // What addresses to use?
-#define KZ_105_STEAM
+#define DITTO_WIN_STEAM
 
 // Please please please, keep address format like this:
 // #define Something_Addr (0xSOMETHINGu)
@@ -30,7 +30,9 @@
 #define ConstNumb_Addr         (0x01D09634u)
 #define ConstNames_Addr        (0x01D0962Cu)
 #define ConstValues_Addr       (0x01D09630u)
+#define AllocNewVarSlot_Addr   (0x01525840u)
 #define MenuVersionString_Addr (0x01233C16u)
+#define DispatchAsync_Addr     (0x00000000u)
 #endif
 
 #ifdef KZ_105_GOG /* Katana ZERO v1.0.5 Windows GOG */
@@ -38,7 +40,7 @@
 #define RFunctionTableL_Addr   (0x01CFBAE8u)
 #define FREE_RValue__Pre_Addr  (0x00001070u)
 #define YYSetString_Addr       (0x014DA4C0u)
-#define YYCreateString_Addr    (0x014D9AB0u)
+#define YYCreateString_Addr    (0x014D98B0u)
 #define YYStrDup_Addr          (0x014DA540u)
 #define YYFree_Addr            (0x0151EC20u)
 #define ARRAY_LVAL_RV_Addr     (0x014DABD0u)
@@ -57,20 +59,22 @@
 #define ConstNumb_Addr         (0x01D085C4u)
 #define ConstNames_Addr        (0x01D085BCu)
 #define ConstValues_Addr       (0x01D085C0u)
+#define AllocNewVarSlot_Addr   (0x015244C0u)
 #define MenuVersionString_Addr (0x01232846u)
+#define DispatchAsync_Addr     (0x00000000u)
 #endif
 
 #ifdef DITTO_WIN_STEAM /* The Swords of Ditto 1.17.05-205 STM Windows Steam */
 #define RFunctionTable_Addr    (0x02C4ABDCu)
 #define RFunctionTableL_Addr   (0x02C4ABE0u)
 #define FREE_RValue__Pre_Addr  (0x00001070u)
-#define YYSetString_Addr       (0x023709C0u) /* TODO, CHECK(!) */
-#define YYCreateString_Addr    (0x0236F980u)
+#define YYSetString_Addr       (0x023709C0u)
+#define YYCreateString_Addr    (0x0236F780u)
 #define YYStrDup_Addr          (0x02370A40u)
 #define YYFree_Addr            (0x023BF910u)
 #define ARRAY_LVAL_RV_Addr     (0x02371200u)
 #define Variable_Addr          (0x02979E98u)
-#define GMLScript_Addr         (0x02982340u)
+#define GMLScript_Addr         (0x02982D68u)
 #define Run_Room_Addr          (0x02C46960u)
 #define Global_YYObject_Addr   (0x02A2ADE8u)
 #define Object_Hash_Addr       (0x02A356ECu)
@@ -83,6 +87,8 @@
 #define YYError_Addr           (0x0236FB90u)
 #define ConstNumb_Addr         (0x02C4E090u)
 #define ConstNames_Addr        (0x02C4E088u)
-#define ConstValues_Addr       (0x02C4E08cu)
-#define MenuVersionString_Addr (0x01232846u)
+#define ConstValues_Addr       (0x02C4E08Cu)
+#define AllocNewVarSlot_Addr   (0x023C5310u)
+#define MenuVersionString_Addr (0x000020C0u)
+#define DispatchAsync_Addr     (0x0248E970u)
 #endif

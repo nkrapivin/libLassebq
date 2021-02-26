@@ -1,3 +1,5 @@
+#include "GMAddresses.h"
+#ifdef DITTO_WIN_STEAM
 #include "DittoRAMProxy.h"
 #include "libLassebq.h"
 #include "Utils.h"
@@ -62,3 +64,4 @@ extern "C" __declspec(dllexport) double __cdecl ram_application(void) { return D
 extern "C" __declspec(dllexport) double __cdecl ram_installed(void) { return DProxy_ram_installed(); }
 extern "C" __declspec(dllexport) double __cdecl ram_used(void) { return DProxy_ram_used(); }
 extern "C" __declspec(dllexport) double __cdecl ram_available(void) { return DProxy_ram_available(); }
+#endif

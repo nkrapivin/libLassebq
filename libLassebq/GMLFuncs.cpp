@@ -18,9 +18,11 @@ void CallRFunction(int id, RValue& ret, const RValueList& args)
 
 	// allocate arguments **on the stack!** because GameMaker is stupid.
 	RValue Rargs[RUNTIME_MAX_ARGS]{ /* will execute the default constructor */ };
-	for (const auto& rv : args) {
-		if (i >= sizeof(Rargs)) abort();
-		Rargs[i] = rv; i++;
+	for (const auto& rv : args)
+	{
+		if (i > ((sizeof(Rargs)/sizeof(*Rargs)) - 1)) abort();
+		Rargs[i] = rv;
+		i++;
 	}
 
 	RFunc.f_routine(ret, g_Self, g_Other, argc, Rargs);

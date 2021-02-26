@@ -1,7 +1,6 @@
 #pragma once
 #include <string>
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
+#include "stdafx.h"
 
 struct vec3
 {
@@ -60,11 +59,44 @@ extern YYFreeT YYFree;
 extern FREE_RVal_Pre FREE_RValue__Pre;
 extern ARRAYLVal ARRAY_LVAL_RValue;
 
+template <typename T> struct _RefFactory
+{
+	static T Alloc(T _thing, int _size) { return _thing; }
+	static T Create(T _thing, int& _size) { _size = 0; return _thing; }
+	static T Destroy(T _thing) { return _thing; }
+};
+
+template <> struct _RefFactory< const char* >
+{
+	static const char* Alloc(const char* _thing, int _size) { abort(); return nullptr; }
+	static const char* Create(const char* _thing, int& _size) { _size = _thing ? (int)strlen(_thing) : 0; return YYStrDup(_thing); }
+	static const char* Destroy(const char* _thing) { YYFree(reinterpret_cast<void*>(const_cast<char*>(_thing))); return nullptr; }
+};
+
 template <typename T> struct _RefThing
 {
 	T		m_thing;
 	int		m_refCount;
 	int		m_size;
+
+	_RefThing(int _maxSize) {
+		// this needs to have some sort of factory based on the type to do a duplicate
+		m_thing = _RefFactory<T>::Alloc(m_thing, _maxSize);
+		m_size = _maxSize;
+		m_refCount = 0;
+		inc();
+	}
+
+	_RefThing(T _thing) {
+		// this needs to have some sort of factory based on the type to do a duplicate
+		m_thing = _RefFactory<T>::Create(_thing, m_size);
+		m_refCount = 0;
+		inc();
+	}
+
+	~_RefThing() {
+		dec();
+	}
 
 	void inc(void) {
 		++m_refCount;
@@ -74,20 +106,20 @@ template <typename T> struct _RefThing
 		--m_refCount;
 		if (m_refCount == 0) {
 			// use the factory to clean it up and give us a default thing to use
+			m_thing = _RefFactory<T>::Destroy(m_thing);
 			m_size = 0;
 			delete this;
 		} // end if
 	} // end Dec
 
-	T get(void) const { return m_thing; }
-	int size(void) const { return m_size; }
+	T   get(void)  const { return m_thing; }
+	int size(void) const { return m_size;  }
 
-	static _RefThing<T>* assign(_RefThing<T>* _other) { if (_other != nullptr) { _other->inc(); } return _other; }
+	static _RefThing<T>* assign(_RefThing<T>* _other) { if (_other != nullptr) { _other->inc(); } return _other;  }
 	static _RefThing<T>* remove(_RefThing<T>* _other) { if (_other != nullptr) { _other->dec(); } return nullptr; }
 };
 
 typedef _RefThing<const char*> RefString;
-typedef _RefThing<void*> RefKeep;
 
 struct DynamicArrayOfRValue
 {
@@ -140,7 +172,7 @@ struct RValue
 	RValue(int v);
 	RValue(long long v);
 	RValue(bool v);
-	RValue(std::nullptr_t v);
+	RValue(std::nullptr_t);
 	RValue(std::nullptr_t, bool undefined);
 	RValue(void* v);
 	RValue(const char* v);
@@ -167,8 +199,6 @@ struct RValue
 	RValue& operator--();
 	RValue  operator--(int);
 
-	RValue& operator+=(const char* v);
-
 	bool operator==(const RValue& rhs) const;
 	bool operator!=(const RValue& rhs) const;
 
@@ -185,6 +215,7 @@ struct RValue
 	const DynamicArrayOfRValue* asArray() const;
 	bool isNumber() const;
 	bool isUnset() const;
+	bool isArray() const;
 
 	operator double() const;
 	operator int() const;
@@ -207,5 +238,9 @@ struct RVariableRoutine
 };
 
 extern RVariableRoutine* g_BuiltinVars;
+
+class YYObjectBase;
+typedef int(*AllocNewVarSlotT)(YYObjectBase* obj, const char* name);
+extern AllocNewVarSlotT Code_Variable_FindAlloc_Slot_From_Name;
 
 #pragma pack(pop)

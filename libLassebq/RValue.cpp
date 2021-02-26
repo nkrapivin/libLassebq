@@ -10,6 +10,7 @@ YYStrDupT YYStrDup = nullptr;
 YYFreeT YYFree = nullptr;
 ARRAYLVal ARRAY_LVAL_RValue = nullptr;
 RVariableRoutine* g_BuiltinVars = nullptr;
+AllocNewVarSlotT Code_Variable_FindAlloc_Slot_From_Name = nullptr;
 
 void RValue::__localFree()
 {
@@ -123,7 +124,7 @@ RValue::RValue(bool v)
 	val = v ? 1.0 : 0.0;
 }
 
-RValue::RValue(std::nullptr_t v)
+RValue::RValue(std::nullptr_t)
 {
 	flags = 0;
 	kind = VALUE_PTR;
@@ -536,6 +537,11 @@ bool RValue::isNumber() const
 bool RValue::isUnset() const
 {
 	return kind == VALUE_UNSET;
+}
+
+bool RValue::isArray() const
+{
+	return (kind & MASK_KIND_RVALUE) == VALUE_ARRAY;
 }
 
 RValue::operator bool() const

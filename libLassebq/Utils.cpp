@@ -20,8 +20,8 @@ BOOL ClearConsole()
 	dwConSize = csbi.dwSize.X * csbi.dwSize.Y;
 
 	// Fill the entire screen with blanks.
-	if (FillConsoleOutputCharacterA(hConsole, // Handle to console screen buffer
-		' ',                                  // Character to write to the buffer
+	if (FillConsoleOutputCharacterW(hConsole, // Handle to console screen buffer
+		L' ',                                 // Character to write to the buffer
 		dwConSize,                            // Number of cells to write
 		coordScreen,                          // Coordinates of first cell
 		&cCharsWritten) != TRUE)              // Receive number of characters written
@@ -52,16 +52,18 @@ void WaitForDebugger()
 
 void AllocConsoleQuick()
 {
-	FILE *__fDummy;
 	BOOL bResult;
 
 	bResult = AllocConsole();
 
 	if (bResult == TRUE)
 	{
-		_wfreopen_s(&__fDummy, L"CONIN$", L"r", stdin);
-		_wfreopen_s(&__fDummy, L"CONOUT$", L"w", stderr);
-		_wfreopen_s(&__fDummy, L"CONOUT$", L"w", stdout);
+		FILE* oldstdin = stdin;
+		FILE* oldstderr = stderr;
+		FILE* oldstdout = stdout;
+		_wfreopen_s(&oldstdin, L"CONIN$", L"r", stdin);
+		_wfreopen_s(&oldstderr, L"CONOUT$", L"w", stderr);
+		_wfreopen_s(&oldstdout, L"CONOUT$", L"w", stdout);
 		//SetConsoleCP(CP_UTF8);
 		SetConsoleOutputCP(CP_UTF8);
 		SetConsoleTitle(TEXT("libLassebq Console Window"));
@@ -75,7 +77,7 @@ const char* GetRandomQuote()
 	srand(rndSeed);
 
 	// lel.
-	int rndValue = rand() % 7;
+	int rndValue = rand() % 10;
 	switch (rndValue)
 	{
 		case 0: return "Never fear, the pug is here.";
@@ -85,7 +87,70 @@ const char* GetRandomQuote()
 		case 4: return "[unknown] likes cats, even though he says he doesn't.";
 		case 5: return "#FreeAlexeiNavalny"; // let's hope our school teachers won't see this :p
 		case 6: return "Here comes the videogame";
+		case 7: return "Now with 90% more metamethods";
+		case 8: return "The feeling of a 2.0 release, it's rewarding, isn't it?";
+		case 9: return u8"о, это что, русский текст?"; // console output encoding is utf8.
 		// what?
 		default: return "Wtf? You're not supposed to see this quote.";
 	}
+}
+
+bool CheckFileOk(const std::string& filePath)
+{
+#ifdef USE_WINAPI_FILE_WAIT_FIX
+	HANDLE hFile = nullptr;
+	DWORD dwErr = 0;
+	bool ret = false;
+
+	int siz = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, filePath.c_str(), -1, nullptr, 0);
+	LPWSTR wFilename = new WCHAR[siz];
+	MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, filePath.c_str(), -1, wFilename, siz);
+
+	for (int i = 0, j = 0;;)
+	{
+		hFile = CreateFileW(wFilename, GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+		dwErr = GetLastError();
+		CloseHandle(hFile);
+
+		if (dwErr == ERROR_SHARING_VIOLATION) // file is being used by something?
+		{
+			std::cout << "File " << filePath << " is busy, waiting..." << std::endl;
+			Sleep(10);
+			i++;
+			if (i > 10) // waited for 10*10 milisecs, that's a lot.
+			{
+				std::cout << "Waited too much, bailing..." << std::endl;
+				break;
+			}
+		}
+		else if (dwErr == ERROR_FILE_NOT_FOUND) // just break, ignore non-existent files.
+		{
+			break;
+		}
+		else if (hFile == INVALID_HANDLE_VALUE || hFile == nullptr) // what? that is never supposed to happen.
+		{
+			j++;
+			if (j > 10)
+			{
+				std::cout << "PLEASE CLOSE THE GAME NOW AND REMOVE `" << filePath << "` FROM THE LOADLIST!" << std::endl;
+			}
+			else
+			{
+				std::cout << "Failed to open file, bailing..." << std::endl;
+			}
+			break;
+		}
+		else
+		{
+			ret = true;
+			break;
+		}
+	}
+
+	delete[] wFilename;
+	std::cout << "File is no longer busy or the loop was stopped." << std::endl;
+	return ret;
+#else
+	return true;
+#endif
 }

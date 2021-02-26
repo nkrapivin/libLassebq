@@ -5,7 +5,7 @@
 
 constexpr unsigned long long makeevkey(unsigned long long type, unsigned long long subtype)
 {
-	return (subtype | type << 0x20ull);
+	return (subtype | (type << 0x20ull));
 }
 
 extern std::unordered_map<unsigned long long, std::string> mapOfEvents;
@@ -70,14 +70,50 @@ template<class K, class V, int I = 3>
 class CHashMap {
 public:
 	int m_curSize;
-	int m_numUsed;
+	int m_numUsed; // actual size of the hashmap!
 	int m_curMask;
 	int m_growThreshold;
 	Element<K, V, I>* m_elements;
 
 	int GetIdealPosition(Hash _h)
 	{
-		return this->m_curMask & _h;
+		return reinterpret_cast<int>(this->m_curMask & _h & INT32_MAX);
+	}
+
+	Hash GetHashAt(int _pos)
+	{
+		return this->m_elements[_pos].hash;
+	}
+
+	Hash CalculateHash(int _k)
+	{
+		return reinterpret_cast<Hash>(_k * -1640531535 + 1);
+	}
+
+	Hash CalculateHash(unsigned long long _k)
+	{
+		return reinterpret_cast<Hash>(static_cast<Hash>(_k * 11400714819323198549uLL >> 0x20uLL) + 1u);
+	}
+
+	Hash CalculateHash(YYObjectBase* _k)
+	{
+		return static_cast<Hash>(((static_cast<unsigned long long>(_k)) >> 8) + 1);
+	}
+
+	bool CompareKeys(const char* l, const char* r)
+	{
+		return strcmp(l, r) == 0;
+	}
+
+	bool CompareKeys(unsigned long long l, unsigned long long r)
+	{
+		return l == r;
+	}
+
+	bool CompareKeys(YYObjectBase* l, YYObjectBase* r)
+	{
+		// that makes no sense???
+		return l == r;
 	}
 };
 

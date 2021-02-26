@@ -1,6 +1,5 @@
 #pragma once
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
+#include "stdafx.h"
 
 /*
  * Since The Swords of Ditto is using Spine for skeletal animation,

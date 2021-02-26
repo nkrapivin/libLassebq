@@ -1,5 +1,5 @@
 #pragma once
-#include "lua\include\lua.hpp"
+#include "lua\lua.hpp"
 #include "GMLFuncs.h"
 #include "libLassebq.h"
 #include "GMLConstants.h"
@@ -17,6 +17,11 @@ void InitGMLuaConfig(void);
 struct LasseVar {
 	int index;
 	bool isbuiltin;
+};
+
+struct LasseVarB {
+	CInstanceBase* self;
+	int varid;
 };
 
 // Lua->RV->Lua stuff
@@ -37,6 +42,8 @@ void RegisterVarids(lua_State* _pL);
 int lua_GMLua_getvar(lua_State* _pL);
 int lua_GMLua_setvar(lua_State* _pL);
 int lua_GMLua_inst(lua_State* _pL);
+
+void RenewGlobal(lua_State* _pL);
 
 // config variables.
 extern bool g_ThrowErrors;

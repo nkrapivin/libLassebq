@@ -1,7 +1,9 @@
 #pragma once
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
-#include <stdio.h>
+#include "stdafx.h"
+#include <string>
+#include <iostream>
+
+#define USE_WINAPI_FILE_WAIT_FIX 1
 
 #define ItoD(integer) (static_cast<double>((integer)))
 #define EtoI(e) (static_cast<signed int>((e)))
@@ -11,3 +13,4 @@ BOOL ClearConsole();
 void WaitForDebugger();
 void AllocConsoleQuick();
 const char* GetRandomQuote();
+bool CheckFileOk(const std::string& filePath);
