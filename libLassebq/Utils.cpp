@@ -148,7 +148,7 @@ bool CheckFileOk(const std::string& filePath)
 	}
 
 	delete[] wFilename;
-	std::cout << "File is no longer busy or the loop was stopped." << std::endl;
+	//std::cout << "File is no longer busy or the loop was stopped." << std::endl;
 	return ret;
 #else
 	return true;

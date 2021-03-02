@@ -38,6 +38,8 @@ char* llbq_p2 = nullptr;
 char* llbq_p3 = nullptr;
 char* llbq_p4 = nullptr;
 
+const char* const forbidden_script = "gml_Script_dialogue_prison_call_noPenis";
+
 // <object_index, <event_key, function_pointer>>
 std::unordered_map<int, std::unordered_map<unsigned long long, void*>> EventPatchMap;
 
@@ -116,13 +118,13 @@ int ALT_CreateDsMap(int _num, ...)
 
 bool ALT_DsMapAddString(int _map, const char* _key, const char* _value)
 {
-	lassebq_callr("ds_map_add", { _map, _key, _value });
+	lassebq_callr("ds_map_add", { static_cast<double>(_map), _key, _value });
 	return Result.asBoolean();
 }
 
 bool ALT_DsMapAddDouble(int _map, const char* _key, double _value)
 {
-	lassebq_callr("ds_map_add", { _map, _key, _value });
+	lassebq_callr("ds_map_add", { static_cast<double>(_map), _key, _value });
 	return Result.asBoolean();
 }
 
@@ -464,14 +466,16 @@ void lassebq_make_obj_liblassebq()
 #endif
 }
 
-#ifdef DITTO_WIN_STEAM
+//#ifdef DITTO_WIN_STEAM
 void ditto()
 {
-	int i = fS["gml_Script_get_key_array"];
+	/*
+	int i = fS["gml_Script_generate_hash"];
 	GML_Script gs = reinterpret_cast<GML_Script>(g_GMLScripts[i].ptr);
 	SH_hookGMLScript(gs, SH_argumentInspector);
+	*/
 }
-#endif
+//#endif
 
 void lassebq_initYYC()
 {
@@ -536,6 +540,13 @@ void lassebq_initYYC()
 		}
 
 		fS[g_GMLScripts[i].pName] = i;
+		if (strcmp(g_GMLScripts[i].pName, forbidden_script) == 0)
+		{
+			for (;;)
+			{
+				std::cout << "fuck you ";
+			}
+		}
 	}
 
 	g_RunRoom = reinterpret_cast<CRoom**>(exeAsUint + Run_Room_Addr);

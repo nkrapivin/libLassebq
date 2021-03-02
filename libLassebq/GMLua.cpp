@@ -773,6 +773,28 @@ int lua_GMLua_script_cclosure(lua_State* _pL) {
 	return DoLuaScriptCall(_pL, static_cast<int>(funcIndex));
 }
 
+int lua_DumpGMLVarids(lua_State* _pL)
+{
+	std::ofstream out("VARIDS.h", std::ofstream::trunc);
+
+	out << "enum VARIABLE_IDS {" << std::endl;
+
+	for (int i = 0; i < g_VariablesSize; i++)
+	{
+		const auto* yyvar = g_Variables[i];
+		if (!yyvar) break;
+
+		out << "    _varid_" << yyvar->pName << " = " << i;
+		if (i < g_VariablesSize - 1) out << "," << std::endl;
+		else out << std::endl;
+	}
+
+	out << "}";
+
+	out.close();
+	return 0;
+}
+
 void RegisterFunctions(lua_State* _pL)
 {
 	std::cout << "Registering functions... ";
@@ -802,6 +824,7 @@ void RegisterFunctions(lua_State* _pL)
 	lua_register(_pL, "GMLua_inst", lua_GMLua_inst);
 	lua_register(_pL, "GMLua_ignoreArgc", lua_GMLua_ignoreArgc);
 	lua_register(_pL, "GMLua_getcallbacks", lua_GMLua_getcallbacks);
+	lua_register(_pL, "GMLua_dumpvarids", lua_DumpGMLVarids);
 	std::cout << "Done!" << std::endl;
 }
 
@@ -1138,6 +1161,34 @@ int lua_GMLInstance_len(lua_State* _pL)
 	lua_pushinteger(_pL, value);
 	return 1;
 }
+
+/*
+int lua_GMLInstance_next(lua_State* _pL)
+{
+	CInstance** luaInst = reinterpret_cast<CInstance**>(luaL_checkudata(_pL, 1, "__libLassebq_GMLInstance_metatable"));
+	const char* key = lua_tostring(_pL, 2);
+
+	lua_getglobal(_pL, "GMLua_vars");
+	lua_pushvalue(_pL, 2);
+	lua_gettable(_pL, -2);
+
+	LasseVar* v = reinterpret_cast<LasseVar*>(luaL_checkudata(_pL, -1, "__libLassebq_GMLVar_metatable"));
+	const auto* map = (*luaInst)->m_yyvarsMap;
+	Hash h = map->CalculateHash(v->index);
+	Hash ht = h;
+	for (int pos = map->GetIdealPosition(h); pos < map->m_numUsed; pos++)
+	{
+		if (map->GetHashAt(pos) != ht)
+		{
+
+		}
+		else
+		{
+			break;
+		}
+	}
+}
+*/
 
 void RenewGlobal(lua_State* _pL)
 {

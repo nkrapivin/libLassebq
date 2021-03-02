@@ -75,42 +75,42 @@ public:
 	int m_growThreshold;
 	Element<K, V, I>* m_elements;
 
-	int GetIdealPosition(Hash _h)
+	const int GetIdealPosition(Hash _h) const
 	{
-		return reinterpret_cast<int>(this->m_curMask & _h & INT32_MAX);
+		return static_cast<int>(this->m_curMask & _h & INT32_MAX);
 	}
 
-	Hash GetHashAt(int _pos)
+	const Hash GetHashAt(int _pos) const
 	{
 		return this->m_elements[_pos].hash;
 	}
 
-	Hash CalculateHash(int _k)
+	const Hash CalculateHash(int _k) const
 	{
-		return reinterpret_cast<Hash>(_k * -1640531535 + 1);
+		return static_cast<Hash>(_k * -1640531535 + 1);
 	}
 
-	Hash CalculateHash(unsigned long long _k)
+	const Hash CalculateHash(unsigned long long _k) const
 	{
 		return reinterpret_cast<Hash>(static_cast<Hash>(_k * 11400714819323198549uLL >> 0x20uLL) + 1u);
 	}
 
-	Hash CalculateHash(YYObjectBase* _k)
+	const Hash CalculateHash(YYObjectBase* _k) const
 	{
 		return static_cast<Hash>(((static_cast<unsigned long long>(_k)) >> 8) + 1);
 	}
 
-	bool CompareKeys(const char* l, const char* r)
+	const bool CompareKeys(const char* l, const char* r) const
 	{
 		return strcmp(l, r) == 0;
 	}
 
-	bool CompareKeys(unsigned long long l, unsigned long long r)
+	const bool CompareKeys(unsigned long long l, unsigned long long r) const
 	{
 		return l == r;
 	}
 
-	bool CompareKeys(YYObjectBase* l, YYObjectBase* r)
+	const bool CompareKeys(YYObjectBase* l, YYObjectBase* r) const
 	{
 		// that makes no sense???
 		return l == r;
