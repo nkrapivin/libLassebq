@@ -206,6 +206,7 @@
     <ClInclude Include="RValue.h" />
     <ClInclude Include="Scheduler.h" />
     <ClInclude Include="ScriptHooker.h" />
+    <ClInclude Include="SHAutogen.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="SYYStackTrace.h" />
     <ClInclude Include="targetver.h" />
@@ -271,6 +272,7 @@
     <ClCompile Include="RValue.cpp" />
     <ClCompile Include="Scheduler.cpp" />
     <ClCompile Include="ScriptHooker.cpp" />
+    <ClCompile Include="SHAutogen.cpp" />
     <ClCompile Include="stdafx.cpp" />
     <ClCompile Include="SYYStackTrace.cpp" />
     <ClCompile Include="Utils.cpp" />

@@ -886,7 +886,7 @@ int RValueToLua(lua_State* _pL, const RValue& result)
 			{
 				// result is the only reference, it will likely be deallocated.
 				*varArray = new RValue(result);
-				(*varArray)->flags |= ERV_Owned; // Lassebq himself is responsible for this RValue.
+				(*varArray)->flags |= ERV_Owned; // this copy is managed by libLassebq.
 			}
 			else
 			{

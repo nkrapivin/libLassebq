@@ -287,16 +287,6 @@ void lassebq_luaPatch_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 	int event_type = lassebq_get_bvar("event_type");
 	int event_numb = lassebq_get_bvar("event_number");
 	unsigned long long evKey = lassebq_evKey(event_type, event_numb);
-	if (event_type == ev_other && event_numb == ev_save_load)
-	{
-		for (int b = 0; true; b++)
-		{
-			lassebq_callr("buffer_exists", { b });
-			if (!Result.asBoolean()) break;
-			lassebq_callr("buffer_save", { b, std::to_string(b) + "_BEFORE_buf.dat" });
-		}
-	}
-
 
 	GML_ObjectEvent origptr = reinterpret_cast<GML_ObjectEvent>
 		(EventPatchMap[_pSelf->m_pObject->m_ID][evKey]);
@@ -361,6 +351,84 @@ void lassebq_addEvent(CObjectGM* gmObj, int etype, int esubtype, const char* nam
 	CCode* code = lassebq_fake_CCode(evt, name);
 	CEvent* ev = lassebq_fake_CEvent(gmObj->m_ID, code);
 	InsertEvent(gmObj->m_eventsMap, key, ev);
+}
+
+void lassebq_patchScripts()
+{
+#if USE_DETOURS
+	std::cout << "Trying to patch scripts..." << std::endl;
+	
+	const std::string prefix("gml_Script_");
+	int r, a, type;
+	for (const std::string& fn : Lscripts)
+	{
+		r = luaL_dofile(lS, fn.c_str());
+		if (r == LUA_OK)
+		{
+			a = lua_gettop(lS);
+			
+			if (a > 0)
+			{
+				type = lua_type(lS, -1);
+				if (type == LUA_TTABLE)
+				{
+					for (const std::pair<std::string, int>& sPair : fS)
+					{
+						if (sPair.first.substr(0, prefix.length()) != prefix)
+						{
+							// not a script!
+							continue;
+						}
+
+						const std::string scriptName(sPair.first.substr(prefix.length()));
+
+						type = lua_getfield(lS, -1, scriptName.c_str());
+						lua_pop(lS, 1);
+						if (type == LUA_TTABLE)
+						{
+							SH_hookGMLScript(g_GMLScripts[sPair.second], sPair.second);
+						}
+					}
+				}
+				lua_pop(lS, 1);
+			}
+			else
+			{
+				std::cout << "Lua script " << fn << " didn't return anything, is this intentional?" << std::endl;
+			}
+		}
+		else
+		{
+			std::cout << "Failed to execute script " << fn << " it will be ignored. ret=" << r << std::endl;
+		}
+	}
+#endif
+}
+
+void what()
+{
+	std::ofstream out("kek.cpp", std::ofstream::trunc);
+	out << "#include \"SHAutogen.h\"" << std::endl;
+
+	const int am = 10000;
+	for (int i = 0; i < am; i++)
+	{
+		out << "DEF_LLBQ_DTR_ROUTINE(" << i << ")" << std::endl;
+	}
+
+	out << "GML_Script SH_DummyRoutines[] = {" << std::endl;
+	for (int i = 0; i < am; i++)
+	{
+		out << "\t" << "SH_routine" << i << "," << std::endl;
+	}
+	out << "\tnullptr" << std::endl << "};";
+
+	out << std::endl;
+
+	out << "GML_Script SH_DummyPVOIDs[" << am << "]{ nullptr };" << std::endl;
+
+	out << std::endl;
+	out.close();
 }
 
 void lassebq_patchObject()
@@ -469,11 +537,6 @@ void lassebq_make_obj_liblassebq()
 //#ifdef DITTO_WIN_STEAM
 void ditto()
 {
-	/*
-	int i = fS["gml_Script_generate_hash"];
-	GML_Script gs = reinterpret_cast<GML_Script>(g_GMLScripts[i].ptr);
-	SH_hookGMLScript(gs, SH_argumentInspector);
-	*/
 }
 //#endif
 
@@ -502,6 +565,7 @@ void lassebq_initYYC()
 		std::cout << std::endl;
 		if (!g_ThrowErrors) std::cout << "Will ignore Lua errors, this is VERY evil and unstable!" << std::endl;
 		if (g_AddCollisionEvents) std::cout << "Collision event name generation enabled, loading times will be WAY slower." << std::endl;
+		if (g_AddScripts) std::cout << "GML script hooking enabled, loading times will be slowed down." << std::endl;
 	}
 
 	exeBase = GetModuleHandleW(nullptr);
@@ -603,6 +667,10 @@ void lassebq_initYYC()
 	InitGMLuaScripts();
 	InitLua();
 	lassebq_patchObject();
+	if (g_AddScripts)
+	{
+		lassebq_patchScripts();
+	}
 
 	// very cursed.
 	std::cout << "Applying " << PROJECT_NAME << " specific patches..." << std::endl;
@@ -613,6 +681,7 @@ void lassebq_initYYC()
 	std::cout << "Total unique variables " << g_TotalVarSize << std::endl;
 
 	ditto();
+	//what();
 
 	std::cout << "All Done, proceeding to the game..." << std::endl;
 	std::cout << std::endl;

@@ -8,11 +8,10 @@
 #include "GMLFuncs.h"
 #include "Utils.h"
 #include "libLassebq.h"
-#include <unordered_map>
+#include "GMLua.h"
 
-void SH_initDetours(void);
-void SH_hookGMLScript(const GML_Script original, const GML_Script func);
-RValue& SH_argumentInspector(CInstance* _pSelf, CInstance* _pOther, RValue& _result, int _count, const RValue** _args);
+void SH_hookGMLScript(const YYGMLFunc& ref, const int index);
+RValue& SH_hookerRoutine(const int _myIndex, CInstance* _pSelf, CInstance* _pOther, RValue& _result, int _count, const RValue** _args);
 void SH_quitDetours(void);
 
 #endif
