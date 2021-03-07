@@ -1,6 +1,8 @@
 /// libLassebq injector script
 /// @author Nikita Krapivin
-/// @version v1.0.0
+/// @version v1.1.0
+
+using System.Linq; // needed for the .Where() method
 
 void InjectDLL()
 {
@@ -61,13 +63,26 @@ void InjectDLL()
 	Data.FORM.EXTN.productIdData.Add(System.Text.Encoding.ASCII.GetBytes("LIBLASSEBQYYCDLL"));
 }
 
-bool ScriptEntry()
+bool IsNotAdded()
+{
+	int possible = Data.Extensions.Where(x => x.Name.Content == "libLassebq").Count();
+	if (possible > 0)
+	{
+		ScriptError("libLassebq is already added, consider restoring from a backup?", "Error");
+		return false;
+	}
+
+	return true;
+}
+
+bool ScriptEntry() // true - ok, false - any kind of an error.
 {
 	// We start here.
+	if (!IsNotAdded()) return false;
 	if (!ScriptQuestion("This will modify your .win, be sure to make a backup, proceed?")) return false;
 	InjectDLL();
 	ScriptMessage("Done! Save the .win and start the game.");
 	return true;
 }
 
-if (!ScriptEntry()) return;
+ScriptEntry();
