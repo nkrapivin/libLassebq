@@ -329,6 +329,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="lua54.dll" />
+    <None Include="test.lua" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="libLassebq.rc">

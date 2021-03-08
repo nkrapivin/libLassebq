@@ -1,5 +1,4 @@
 #include "SHAutogen.h"
-DEF_LLBQ_DUMMY_PVOID_TABLE;
 DEF_LLBQ_DTR_ROUTINE(0)
 DEF_LLBQ_DTR_ROUTINE(1)
 DEF_LLBQ_DTR_ROUTINE(2)
@@ -20003,3 +20002,4 @@ GML_Script SH_DummyRoutines[] = {
 	SH_routine9999,
 	nullptr
 };
+DEF_LLBQ_DUMMY_PVOID_TABLE;

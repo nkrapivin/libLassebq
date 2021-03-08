@@ -103,6 +103,12 @@ bool CheckFileOk(const std::string& filePath)
 	bool ret = false;
 
 	int siz = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, filePath.c_str(), -1, nullptr, 0);
+	if (siz <= 0)
+	{
+		std::cout << "UNABLE TO CONVERT YOUR FILENAME TO UTF-16: " << filePath << std::endl;
+		return false;
+	}
+
 	LPWSTR wFilename = new WCHAR[siz];
 	MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, filePath.c_str(), -1, wFilename, siz);
 

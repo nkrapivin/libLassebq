@@ -1,7 +1,7 @@
 #pragma once
 
 // What addresses to use?
-#define KZ_105_STEAM
+#define DITTO_WIN_STEAM
 
 // Please please please, keep address format like this:
 // #define Something_Addr (0xSOMETHINGu)
