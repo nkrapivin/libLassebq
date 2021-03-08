@@ -399,7 +399,9 @@ void lassebq_patchScripts()
 		}
 		else
 		{
-			std::cout << "Failed to execute script " << fn << " it will be ignored. ret=" << r << std::endl;
+			const char* errmsg = lua_tostring(lS, -1);
+			std::cout << "Failed to execute script " << fn << " it will be ignored. ret=" << r << ",msg=" << errmsg << std::endl;
+			lua_pop(lS, 1);
 		}
 	}
 #endif
@@ -498,7 +500,9 @@ void lassebq_patchObject()
 		}
 		else
 		{
-			std::cout << "Failed to execute script " << fn << " it will be ignored. ret=" << r << std::endl;
+			const char* errmsg = lua_tostring(lS, -1);
+			std::cout << "Failed to execute script " << fn << " it will be ignored. ret=" << r << ",msg=" << errmsg << std::endl;
+			lua_pop(lS, 1);
 		}
 	}
 
