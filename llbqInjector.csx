@@ -1,6 +1,8 @@
 /// libLassebq injector script
 /// @author Nikita Krapivin
-/// @version v1.1.0
+/// @version v1.2.0
+/// The latest release of UndertaleModTool is required to run this script.
+/// I am sorry. But hey, no more ram.dll hack!
 
 using System.Linq; // needed for the .Where() method
 
@@ -9,50 +11,50 @@ void InjectDLL()
 	Data.Extensions.Add(new UndertaleExtension()
 	{
 		ClassName = Data.Strings.MakeString(""),
-		EmptyString = Data.Strings.MakeString(""),
+		FolderName = Data.Strings.MakeString(""),
 		Name = Data.Strings.MakeString("libLassebq"),
-		Files = new UndertalePointerList<UndertaleExtension.ExtensionFile>()
+		Files = new UndertalePointerList<UndertaleExtensionFile>()
 		{
-			new UndertaleExtension.ExtensionFile()
+			new UndertaleExtensionFile()
 			{
 				Filename = Data.Strings.MakeString("libLassebq.dll"),
 				InitScript = Data.Strings.MakeString("lassebq_init"),
 				CleanupScript = Data.Strings.MakeString("lassebq_shutdown"),
-				Kind = UndertaleExtension.ExtensionKind.DLL,
-				Functions = new UndertalePointerList<UndertaleExtension.ExtensionFunction>()
+				Kind = UndertaleExtensionKind.DLL,
+				Functions = new UndertalePointerList<UndertaleExtensionFunction>()
 				{
-					new UndertaleExtension.ExtensionFunction()
+					new UndertaleExtensionFunction()
 					{
-						ID = 1,
+						ID = Data.ExtensionFindLastId(),
 						ExtName = Data.Strings.MakeString("lassebq_init"),
 						Kind = 11,
 						Name = Data.Strings.MakeString("lassebq_init"),
-						Arguments = new UndertaleSimpleList<UndertaleExtension.ExtensionFunctionArg>(),
-						RetType = UndertaleExtension.ExtensionVarType.Double
+						Arguments = new UndertaleSimpleList<UndertaleExtensionFunctionArg>(),
+						RetType = UndertaleExtensionVarType.Double
 					},
-					new UndertaleExtension.ExtensionFunction()
+					new UndertaleExtensionFunction()
 					{
-						ID = 2,
+						ID = Data.ExtensionFindLastId(),
 						ExtName = Data.Strings.MakeString("lassebq_shutdown"),
 						Kind = 11,
 						Name = Data.Strings.MakeString("lassebq_shutdown"),
-						Arguments = new UndertaleSimpleList<UndertaleExtension.ExtensionFunctionArg>(),
-						RetType = UndertaleExtension.ExtensionVarType.Double
+						Arguments = new UndertaleSimpleList<UndertaleExtensionFunctionArg>(),
+						RetType = UndertaleExtensionVarType.Double
 					},
-					new UndertaleExtension.ExtensionFunction()
+					new UndertaleExtensionFunction()
 					{
-						ID = 3,
+						ID = Data.ExtensionFindLastId(),
 						ExtName = Data.Strings.MakeString("RegisterCallbacks"),
 						Kind = 11,
 						Name = Data.Strings.MakeString("lassebq_RegisterCallbacks"),
-						Arguments = new UndertaleSimpleList<UndertaleExtension.ExtensionFunctionArg>()
+						Arguments = new UndertaleSimpleList<UndertaleExtensionFunctionArg>()
 						{
-							new UndertaleExtension.ExtensionFunctionArg() { Type = UndertaleExtension.ExtensionVarType.String },
-							new UndertaleExtension.ExtensionFunctionArg() { Type = UndertaleExtension.ExtensionVarType.String },
-							new UndertaleExtension.ExtensionFunctionArg() { Type = UndertaleExtension.ExtensionVarType.String },
-							new UndertaleExtension.ExtensionFunctionArg() { Type = UndertaleExtension.ExtensionVarType.String },
+							new UndertaleExtensionFunctionArg() { Type = UndertaleExtensionVarType.String },
+							new UndertaleExtensionFunctionArg() { Type = UndertaleExtensionVarType.String },
+							new UndertaleExtensionFunctionArg() { Type = UndertaleExtensionVarType.String },
+							new UndertaleExtensionFunctionArg() { Type = UndertaleExtensionVarType.String },
 						},
-						RetType = UndertaleExtension.ExtensionVarType.Double
+						RetType = UndertaleExtensionVarType.Double
 					}
 				}
 			}
@@ -61,6 +63,7 @@ void InjectDLL()
 
 	// add productid.
 	Data.FORM.EXTN.productIdData.Add(System.Text.Encoding.ASCII.GetBytes("LIBLASSEBQYYCDLL"));
+	// NOTE: will probably be moved over to the UndertaleExtension class itself in the near future.
 }
 
 bool IsNotAdded()
