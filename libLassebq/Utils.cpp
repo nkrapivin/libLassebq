@@ -77,21 +77,35 @@ const char* GetRandomQuote()
 	srand(rndSeed);
 
 	// lel.
-	int rndValue = rand() % 10;
+	int rndValue = rand() % 17;
 	switch (rndValue)
 	{
-		case 0: return "Never fear, the pug is here.";
-		case 1: return "Let's hope Lassebq got his tea.";
-		case 2: return "Stay home and wear a mask.";
-		case 3: return "I am bad at coming up with random quotes, am I?";
-		case 4: return "[unknown] likes cats, even though he says he doesn't.";
-		case 5: return "#FreeAlexeiNavalny"; // let's hope our school teachers won't see this :p
-		case 6: return "Here comes the videogame";
-		case 7: return "Now with 90% more metamethods";
-		case 8: return "The feeling of a 2.0 release, it's rewarding, isn't it?";
-		case 9: return u8"о, это что, русский текст?"; // console output encoding is utf8.
+		case  0: return   "Never fear, the pug is here.";
+		case  1: return   "Let's hope Lassebq got his tea.";
+		case  2: return   "Stay home and wear a mask.";
+		case  3: return   "I am bad at coming up with random quotes, am I?";
+		case  4: return   "[unknown] likes cats, even though he says he doesn't.";
+		case  5: return   "#FreeAlexeiNavalny"; // let's hope our school teachers won't see this :p
+		case  6: return   "Here comes the videogame";
+		case  7: return   "Now with 90% more metamethods";
+		case  8: return   "The feeling of a 2.0 release, it's rewarding, isn't it?";
+		case  9: return u8"о, это что, русский текст?"; // console output encoding is utf8.
+
+		// akhchiptune
+		case 10: return u8"жду релиза akhchiptune как результатов ќ√Ё ^^'";
+		case 11: return   "akhchiptune - the best sound library in the world that is yet to be released!";
+
+		// hugs
+		case 12: return   "I wouldn't mind a hug, if you think about it, who wouldn't? They're vewy wawm.";
+		case 13: return u8"обнимашки спасут мир!";
+
+		// cats
+		case 14: return u8"котики классные, они хот€ бы искренне люб€т теб€. =^-^=";
+		case 15: return   "cats are cool, at least they truly love you for who you are. =^-^=";
+
 		// what?
-		default: return "Wtf? You're not supposed to see this quote.";
+		case 16: return   "This is the 17th quote, the last one, consider yourself lucky!";
+		default: return   "Wtf? You're not supposed to see this quote.";
 	}
 }
 
@@ -121,9 +135,9 @@ bool CheckFileOk(const std::string& filePath)
 		if (dwErr == ERROR_SHARING_VIOLATION) // file is being used by something?
 		{
 			std::cout << "File " << filePath << " is busy, waiting..." << std::endl;
-			Sleep(10);
+			Sleep(20);
 			i++;
-			if (i > 10) // waited for 10*10 milisecs, that's a lot.
+			if (i > 20) // waited for 20*20 milisecs, that's a lot.
 			{
 				std::cout << "Waited too much, bailing..." << std::endl;
 				break;
@@ -136,7 +150,7 @@ bool CheckFileOk(const std::string& filePath)
 		else if (hFile == INVALID_HANDLE_VALUE || hFile == nullptr) // what? that is never supposed to happen.
 		{
 			j++;
-			if (j > 10)
+			if (j > 20)
 			{
 				std::cout << "PLEASE CLOSE THE GAME NOW AND REMOVE `" << filePath << "` FROM THE LOADLIST!" << std::endl;
 			}

@@ -75,9 +75,6 @@
     <ClInclude Include="TheSwordsOfDitto.h">
       <Filter>Заголовочные файлы</Filter>
     </ClInclude>
-    <ClInclude Include="DittoRAMProxy.h">
-      <Filter>Заголовочные файлы</Filter>
-    </ClInclude>
     <ClInclude Include="Dangerous.h">
       <Filter>Заголовочные файлы</Filter>
     </ClInclude>
@@ -213,9 +210,6 @@
       <Filter>Файлы исходного кода</Filter>
     </ClCompile>
     <ClCompile Include="GameSpecific.cpp">
-      <Filter>Файлы исходного кода</Filter>
-    </ClCompile>
-    <ClCompile Include="DittoRAMProxy.cpp">
       <Filter>Файлы исходного кода</Filter>
     </ClCompile>
     <ClCompile Include="Dangerous.cpp">

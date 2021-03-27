@@ -409,6 +409,7 @@ void lassebq_patchScripts()
 
 void what()
 {
+	/*
 	std::ofstream out("kek.cpp", std::ofstream::trunc);
 	out << "#include \"SHAutogen.h\"" << std::endl;
 
@@ -431,6 +432,27 @@ void what()
 
 	out << std::endl;
 	out.close();
+	*/
+
+
+
+	/*
+	std::ofstream out("runtime.txt", std::ofstream::trunc);
+
+	out << u8"коты - это священные животные, цари вселенной, боги земли." << std::endl;
+	out << u8"но тем не менее - люди, тоже прекрасны. любите и котов и людей!" << std::endl;
+	out << u8"коту будет приятно, а человеку вдвойне!" << std::endl;
+
+	uintptr_t exeBaseAsUint = reinterpret_cast<uintptr_t>(exeBase);
+
+	for (const std::pair<const std::string&, const int&>& name : fR)
+	{
+		LPVOID addr = reinterpret_cast<LPVOID>(reinterpret_cast<uintptr_t>((*g_RFunctionTable)[name.second].f_routine) - exeBaseAsUint);
+		out << addr << u8"|" << name.first << std::endl;
+	}
+
+	out.close();
+	*/
 }
 
 void lassebq_patchObject()
@@ -539,14 +561,17 @@ void lassebq_make_obj_liblassebq()
 }
 
 //#ifdef DITTO_WIN_STEAM
-void ditto()
+void lassebq_testDummyFunction()
 {
+
+
 }
 //#endif
 
 void lassebq_initYYC()
 {
 	sch_begin();
+	atexit(sch_end);
 
 	InitGMLuaConfig();
 	if (!g_NoConsole)
@@ -618,6 +643,7 @@ void lassebq_initYYC()
 	}
 
 	g_RunRoom = reinterpret_cast<CRoom**>(exeAsUint + Run_Room_Addr);
+	g_CInstanceHashList = reinterpret_cast<CHash<CInstance>*>(exeAsUint + CInstanceHash_Addr);
 	g_RFunctionTableLen = reinterpret_cast<int*>(exeAsUint + RFunctionTableL_Addr);
 	g_RFunctionTable = reinterpret_cast<RFunction**>(exeAsUint + RFunctionTable_Addr);
 	g_ObjectHashTable = reinterpret_cast<CHash<CObjectGM>**>(exeAsUint + Object_Hash_Addr);
@@ -684,8 +710,8 @@ void lassebq_initYYC()
 	std::cout << "Instance variables " << g_VariablesSize << std::endl;
 	std::cout << "Total unique variables " << g_TotalVarSize << std::endl;
 
-	ditto();
-	//what();
+	//ditto();
+	what();
 
 	std::cout << "All Done, proceeding to the game..." << std::endl;
 	std::cout << std::endl;
@@ -710,7 +736,7 @@ funcR lassebq_shutdown()
 	// TODO: do something more complicated than this?
 	lua_close(lS);
 	FreeConsole();
-	sch_end();
+	//sch_end();
 	SH_quitDetours();
 	return 1.0;
 }

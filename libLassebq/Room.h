@@ -183,3 +183,5 @@ public:
 };
 
 extern CRoom** g_RunRoom;
+extern CHash<CInstance>* g_CInstanceHashList;
+CInstance* lass_find_CInstance_QUICK(int obj_index);

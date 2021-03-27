@@ -7,7 +7,7 @@ const char* const VerString = "v1.0.5\n[LLBQ]"; // LLBQ -> LibLasseBQ
 const char* const VerString = "v1.0.5\n[LGOG]";
 #endif
 #ifdef DITTO_WIN_STEAM
-const char* const VerString = "\\#LetUsEditTranslationFiles/1.17.05-205"; // do. not. ask.
+const char* const VerString = "PugCrypt has been defeated, hip hip hooray! :D / 1.17.05-205"; // do. not. ask.
 #endif
 
 void ApplyGameSpecificPatches(uintptr_t exeBase)

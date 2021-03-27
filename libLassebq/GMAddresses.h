@@ -18,6 +18,7 @@
 #define Variable_Addr          (0x01A37CF8u)
 #define GMLScript_Addr         (0x01A3C6F4u)
 #define Run_Room_Addr          (0x01CF88D8u)
+#define CInstanceHash_Addr     (0x01A49AF8u)
 #define Global_YYObject_Addr   (0x01ADE1D8u)
 #define Object_Hash_Addr       (0x01AE769Cu)
 #define GetCtxStackTop_Addr    (0x014D5A80u)

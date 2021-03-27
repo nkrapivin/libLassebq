@@ -165,7 +165,6 @@
     <ClInclude Include="Dangerous.h" />
     <ClInclude Include="Data.h" />
     <ClInclude Include="detours\detours.h" />
-    <ClInclude Include="DittoRAMProxy.h" />
     <ClInclude Include="GameSpecific.h" />
     <ClInclude Include="GMLConstants.h" />
     <ClInclude Include="GMLFuncs.h" />
@@ -216,7 +215,6 @@
   <ItemGroup>
     <ClCompile Include="Dangerous.cpp" />
     <ClCompile Include="Data.cpp" />
-    <ClCompile Include="DittoRAMProxy.cpp" />
     <ClCompile Include="dllmain.cpp">
       <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</CompileAsManaged>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">

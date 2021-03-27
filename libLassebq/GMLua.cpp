@@ -229,6 +229,49 @@ int lua_GMLua_ignoreArgc(lua_State* _pL)
 	return 0;
 }
 
+#if USE_DETOURS
+static bool g_dbgmodedone = false;
+static PVOID g_debug_mode_base = nullptr; // don't even need the proper type, we'll never need the base bruh.
+static bool LLBQ_debug_mode_fake_true(CInstanceBase* lol, int who_cares, RValue* result)
+{
+	result->~RValue(); // free whatever was in there.
+	result->kind = VALUE_BOOL;
+	result->val = 1.0; // VALUE_BOOL is actually a double.
+	return true;
+}
+#endif
+
+int lua_GMLua_detour_debug_mode_var(lua_State* _pL)
+{
+#if USE_DETOURS
+#define DTR_PRINT(_F) std::cout << (_F) << " = " << err << std::endl
+	if (!g_dbgmodedone)
+	{
+		g_dbgmodedone = true;
+
+		for (int i = 0; i < g_BuiltinVariablesSize; i++)
+		{
+			if (strcmp("debug_mode", g_BuiltinVars[i].f_name) == 0)
+			{
+				std::cout << "Detouring debug_mode, sit tight..." << std::endl;
+				g_debug_mode_base = g_BuiltinVars[i].f_getroutine;
+				LONG err = 0; // detours error code.
+				err = DetourTransactionBegin();
+				DTR_PRINT("DetourTransactionBegin()");
+				err = DetourUpdateThread(GetCurrentThread());
+				DTR_PRINT("DetourUpdateThread(GetCurrentThread())");
+				err = DetourAttach(&g_debug_mode_base, LLBQ_debug_mode_fake_true);
+				DTR_PRINT("DetourAttach(&g_debug_mode_base, LLBQ_debug_mode_fake_true)");
+				err = DetourTransactionCommit();
+				DTR_PRINT("DetourTransactionCommit()");
+			}
+		}
+	}
+#endif
+
+	return 0;
+}
+
 bool isInvalidConstant(const char* n)
 {
 	return
@@ -714,7 +757,8 @@ int lua_GMLua_inst(lua_State* _pL)
 		return luaL_error(_pL, __FUNCTION__ " error: invalid argument count, expected 1, got %d.", Largc);
 	}
 
-	if (lua_isinteger(_pL, 1) || lua_isnumber(_pL, 1))
+	int type = lua_type(_pL, 1);
+	if (type == LUA_TNUMBER)
 	{
 		lua_Integer id = lua_tointeger(_pL, 1); // if `v` is a number, it should convert that to an integer?
 		switch (id)
@@ -727,38 +771,30 @@ int lua_GMLua_inst(lua_State* _pL)
 			// why make a new object when you can reuse what llbq gives you?
 			case GM_self: return luaL_error(_pL, __FUNCTION__ " error: instance id cannot be `self`, use _pSelf.");
 			case GM_other: return luaL_error(_pL, __FUNCTION__ " error: instance id cannot be `other`, use _pOther.");
-			case GM_global: return luaL_error(_pL, __FUNCTION__ " error: instance id cannot be `global`, use _pGlobal.");
+
+			// just return _pGlobal.
+			case GM_global: lua_getglobal(_pL, "_pGlobal"); return 1;
 			default: break;
 		}
 
-		if (id < 100000)
+		CInstance* inst = lass_find_CInstance_QUICK(static_cast<int>(id));
+		if (inst == nullptr)
 		{
-			return luaL_error(_pL, __FUNCTION__ " error: instance id cannot be less than 100000, got %lld.", id);
+			lua_pushnil(_pL);
+		}
+		else
+		{
+			CInstance** luaSelf = reinterpret_cast<CInstance**>(lua_newuserdata(lS, sizeof(CInstance*)));
+			*luaSelf = inst;
+			luaL_getmetatable(lS, "__libLassebq_GMLInstance_metatable");
+			lua_setmetatable(lS, -2);
 		}
 
-		CInstance* inst = (*g_RunRoom)->m_Active.m_pFirst;
-		for (int i = 0; i < (*g_RunRoom)->m_Active.m_Count; i++)
-		{
-			if (inst == nullptr) break;
-
-			if (inst->i_id == id)
-			{
-				CInstance** luaSelf = reinterpret_cast<CInstance**>(lua_newuserdata(lS, sizeof(CInstance*)));
-				*luaSelf = inst;
-				luaL_getmetatable(lS, "__libLassebq_GMLInstance_metatable");
-				lua_setmetatable(lS, -2);
-				return 1;
-			}
-
-			inst = inst->m_pNext;
-		}
-
-		lua_pushnil(_pL); // unable to find an instance?
 		return 1;
 	}
 	else
 	{
-		return luaL_error(_pL, __FUNCTION__ " error: invalid type for argument `id`, expected integer or number.");
+		return luaL_error(_pL, __FUNCTION__ " error: invalid type for argument `id`, expected number, got %s.", lua_typename(_pL, type));
 	}
 }
 
@@ -819,12 +855,14 @@ void RegisterFunctions(lua_State* _pL)
 	}
 
 	// Custom variable management functions.
+	std::cout << "GMLua functions... ";
 	lua_register(_pL, "GMLua_getvar", lua_GMLua_getvar);
 	lua_register(_pL, "GMLua_setvar", lua_GMLua_setvar);
 	lua_register(_pL, "GMLua_inst", lua_GMLua_inst);
 	lua_register(_pL, "GMLua_ignoreArgc", lua_GMLua_ignoreArgc);
 	lua_register(_pL, "GMLua_getcallbacks", lua_GMLua_getcallbacks);
 	lua_register(_pL, "GMLua_dumpvarids", lua_DumpGMLVarids);
+	lua_register(_pL, "GMLua_detour_debug_mode_var", lua_GMLua_detour_debug_mode_var);
 	std::cout << "Done!" << std::endl;
 }
 
@@ -1008,7 +1046,7 @@ int lua_GMLVarArray_newindex(lua_State* _pL)
 
 	if (!internal_setvarb(varidPtr->self, varidPtr->varid, static_cast<int>(key), LtoR(_pL, 3), _pL))
 	{
-		return luaL_error(_pL, __FUNCTION__ " error: failed to set builtin variable.");
+		return luaL_error(_pL, __FUNCTION__ " error: failed to set builtin variable. (varid=%d,key=%d)", varidPtr->varid, static_cast<int>(key));
 	}
 
 	return 0;
@@ -1210,7 +1248,7 @@ int lua_GMLRVar_index(lua_State* _pL)
 	RValue** rV = reinterpret_cast<RValue**>(luaL_checkudata(_pL, 1, "__libLassebq_GMLRVar_metatable"));
 	if ((*rV)->pRefArray == nullptr || !((*rV)->isArray()))
 	{
-		return luaL_error(_pL, __FUNCTION__ " error: variable at address %p is NOT an array, or it was freed.", *rV);
+		return luaL_error(_pL, __FUNCTION__ " error: variable at address %p is NOT an array, or it was freed. (type=%d)", *rV, ((*rV)->kind & MASK_KIND_RVALUE));
 	}
 
 	lua_Integer key = lua_tointeger(_pL, 2);
@@ -1237,7 +1275,7 @@ int lua_GMLRVar_newindex(lua_State* _pL)
 	RValue** rV = reinterpret_cast<RValue**>(luaL_checkudata(_pL, 1, "__libLassebq_GMLRVar_metatable"));
 	if ((*rV)->pRefArray == nullptr || !((*rV)->isArray()))
 	{
-		return luaL_error(_pL, __FUNCTION__ " error: variable at address %p is NOT an array, or it was freed.", *rV);
+		return luaL_error(_pL, __FUNCTION__ " error: variable at address %p is NOT an array, or it was freed. (type=%d)", *rV, ((*rV)->kind & MASK_KIND_RVALUE));
 	}
 
 	lua_Integer key = lua_tointeger(_pL, 2);
@@ -1252,7 +1290,7 @@ int lua_GMLRVar_len(lua_State* _pL)
 	RValue** rV = reinterpret_cast<RValue**>(luaL_checkudata(_pL, 1, "__libLassebq_GMLRVar_metatable"));
 	if ((*rV)->pRefArray == nullptr || !((*rV)->isArray()))
 	{
-		return luaL_error(_pL, __FUNCTION__ " error: variable at address %p is NOT an array, or it was freed.", *rV);
+		return luaL_error(_pL, __FUNCTION__ " error: variable at address %p is NOT an array, or it was freed. (type=%d)", *rV, ((*rV)->kind & MASK_KIND_RVALUE));
 	}
 
 	const auto *arr = (*rV)->asArray();
@@ -1272,7 +1310,7 @@ int lua_GMLRVar_tostring(lua_State* _pL)
 	RValue** rV = reinterpret_cast<RValue**>(luaL_checkudata(_pL, 1, "__libLassebq_GMLRVar_metatable"));
 	if ((*rV)->pRefArray == nullptr || !((*rV)->isArray()))
 	{
-		return luaL_error(_pL, __FUNCTION__ " error: variable at address %p is NOT an array, or it was freed.", *rV);
+		return luaL_error(_pL, __FUNCTION__ " error: variable at address %p is NOT an array, or it was freed. (type=%d)", *rV, ((*rV)->kind & MASK_KIND_RVALUE));
 	}
 
 	const auto *arr = (*rV)->asArray();

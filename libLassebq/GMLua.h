@@ -3,6 +3,7 @@
 #include "GMLFuncs.h"
 #include "libLassebq.h"
 #include "GMLConstants.h"
+#include "ScriptHooker.h"
 #include <iostream>
 #include <fstream>
 #include <string>

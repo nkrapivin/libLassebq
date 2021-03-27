@@ -11,6 +11,7 @@
 #include <memory>
 
 extern int g_GMLScriptsSize;
+void lassebq_testDummyFunction();
 
 // Extension func defines.
 #define funcR extern "C" __declspec(dllexport) double       __cdecl 
