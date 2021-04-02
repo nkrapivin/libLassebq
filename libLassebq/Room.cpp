@@ -3,6 +3,7 @@
 
 CRoom** g_RunRoom = nullptr; // this variable was only used to find instances, it is not used anymore!
 CHash<CInstance>* g_CInstanceHashList = nullptr;
+int* g_New_Room = nullptr;
 
 const int FLAG_deactivated = 1;
 

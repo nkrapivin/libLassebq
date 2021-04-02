@@ -14,6 +14,7 @@ bool g_ThrowErrors = true;
 bool g_NoConsole = false;
 bool g_IgnoreArgc = false;
 bool g_AddScripts = false;
+bool g_EnableBeforeEvents = false;
 
 /*
  *  Why:
@@ -441,6 +442,10 @@ void InitGMLuaConfig(void)
 		else if (line == "waitForDebugger")
 		{
 			wait = true;
+		}
+		else if (line == "enableBeforeEvents")
+		{
+			g_EnableBeforeEvents = true;
 		}
 	}
 	cfg.close();

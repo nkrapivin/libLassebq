@@ -34,6 +34,7 @@
 #define AllocNewVarSlot_Addr   (0x01525840u)
 #define MenuVersionString_Addr (0x01233C16u)
 #define DispatchAsync_Addr     (0x00000000u)
+#define New_Room_Addr          (0x01CF8904u)
 #endif
 
 #ifdef KZ_105_GOG /* Katana ZERO v1.0.5 Windows GOG */
@@ -64,6 +65,7 @@
 #define AllocNewVarSlot_Addr   (0x015244C0u)
 #define MenuVersionString_Addr (0x01232846u)
 #define DispatchAsync_Addr     (0x00000000u)
+#define New_Room_Addr          (0x01CF7894u)
 #endif
 
 #ifdef DITTO_WIN_STEAM /* The Swords of Ditto 1.17.05-205 STM Windows Steam */
@@ -94,4 +96,5 @@
 #define AllocNewVarSlot_Addr   (0x023C5310u)
 #define MenuVersionString_Addr (0x000020C0u)
 #define DispatchAsync_Addr     (0x0248E970u)
+#define New_Room_Addr          (0x02C4698Cu)
 #endif

@@ -136,7 +136,7 @@ void ALT_DispatchAsync(int _map, int _eventnum)
 	DispatchAsyncInternal(_map, _eventnum);
 }
 
-void lassebq_doLua(CInstance* _pSelf, CInstance* _pOther, const char* _pLFName) // pointerLuaFunctionName
+bool lassebq_doLua(CInstance* _pSelf, CInstance* _pOther, const char* _pLFName) // pointerLuaFunctionName
 {
 	int r = LUA_OK; const char* errmsg = nullptr; int type = LUA_TNONE; int a = -1;
 	for (const std::string& script : Lscripts)
@@ -210,6 +210,8 @@ void lassebq_doLua(CInstance* _pSelf, CInstance* _pOther, const char* _pLFName) 
 			}
 		}
 	}
+
+	return false;
 }
 
 unsigned long long lassebq_evKey(int etype, int esubtype)
@@ -290,6 +292,13 @@ void lassebq_luaPatch_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 
 	GML_ObjectEvent origptr = reinterpret_cast<GML_ObjectEvent>
 		(EventPatchMap[_pSelf->m_pObject->m_ID][evKey]);
+
+	if (g_EnableBeforeEvents)
+	{
+		std::string nn("Before" + mapOfEvents[evKey]);
+		lassebq_doLua(_pSelf, _pOther, nn.c_str());
+	}
+
 	origptr(_pSelf, _pOther);
 
 	// Execute the lua function.
@@ -595,6 +604,7 @@ void lassebq_initYYC()
 		if (!g_ThrowErrors) std::cout << "Will ignore Lua errors, this is VERY evil and unstable!" << std::endl;
 		if (g_AddCollisionEvents) std::cout << "Collision event name generation enabled, loading times will be WAY slower." << std::endl;
 		if (g_AddScripts) std::cout << "GML script hooking enabled, loading times will be slowed down." << std::endl;
+		if (g_EnableBeforeEvents) std::cout << "Execution of `Before` object events is enabled." << std::endl;
 	}
 
 	exeBase = GetModuleHandleW(nullptr);
@@ -643,6 +653,7 @@ void lassebq_initYYC()
 	}
 
 	g_RunRoom = reinterpret_cast<CRoom**>(exeAsUint + Run_Room_Addr);
+	g_New_Room = reinterpret_cast<int*>(exeAsUint + New_Room_Addr);
 	g_CInstanceHashList = reinterpret_cast<CHash<CInstance>*>(exeAsUint + CInstanceHash_Addr);
 	g_RFunctionTableLen = reinterpret_cast<int*>(exeAsUint + RFunctionTableL_Addr);
 	g_RFunctionTable = reinterpret_cast<RFunction**>(exeAsUint + RFunctionTable_Addr);
@@ -731,14 +742,29 @@ funcR lassebq_init()
 	return 1.0;
 }
 
+const int REASON_game_end = -100;
+const int REASON_game_restart = -200;
+const int REASON_game_load = -300;
+const int REASON_game_end2 = -400;
+
 funcR lassebq_shutdown()
 {
-	// TODO: do something more complicated than this?
-	lua_close(lS);
-	FreeConsole();
-	//sch_end();
-	SH_quitDetours();
-	return 1.0;
+	int r = *g_New_Room;
+	if (r != REASON_game_end && r != REASON_game_end2)
+	{
+		// wrong end reason? :p
+		std::cout << "A friendly reminder, game_restart is evil, do not use this piece of shit please." << std::endl;
+		return 0.0;
+	}
+	else
+	{
+		// TODO: do something more complicated than this?
+		lua_close(lS);
+		FreeConsole();
+		//sch_end();
+		SH_quitDetours();
+		return 1.0;
+	}
 }
 
 funcV RegisterCallbacks(char* p1, char* p2, char* p3, char* p4)
