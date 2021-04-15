@@ -24,9 +24,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="ReadMe.txt" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="stdafx.h">
       <Filter>Заголовочные файлы</Filter>
     </ClInclude>
@@ -78,31 +75,28 @@
     <ClInclude Include="Dangerous.h">
       <Filter>Заголовочные файлы</Filter>
     </ClInclude>
-    <ClInclude Include="lua\lstring.h">
+    <ClInclude Include="Scheduler.h">
+      <Filter>Заголовочные файлы</Filter>
+    </ClInclude>
+    <ClInclude Include="detours\detours.h">
+      <Filter>Заголовочные файлы\detours</Filter>
+    </ClInclude>
+    <ClInclude Include="ScriptHooker.h">
+      <Filter>Заголовочные файлы</Filter>
+    </ClInclude>
+    <ClInclude Include="SHAutogen.h">
+      <Filter>Заголовочные файлы</Filter>
+    </ClInclude>
+    <ClInclude Include="lua\lapi.h">
       <Filter>Заголовочные файлы\lua</Filter>
     </ClInclude>
-    <ClInclude Include="lua\ltable.h">
+    <ClInclude Include="lua\lauxlib.h">
       <Filter>Заголовочные файлы\lua</Filter>
     </ClInclude>
-    <ClInclude Include="lua\ltm.h">
+    <ClInclude Include="lua\lcode.h">
       <Filter>Заголовочные файлы\lua</Filter>
     </ClInclude>
-    <ClInclude Include="lua\lua.h">
-      <Filter>Заголовочные файлы\lua</Filter>
-    </ClInclude>
-    <ClInclude Include="lua\luaconf.h">
-      <Filter>Заголовочные файлы\lua</Filter>
-    </ClInclude>
-    <ClInclude Include="lua\lualib.h">
-      <Filter>Заголовочные файлы\lua</Filter>
-    </ClInclude>
-    <ClInclude Include="lua\lundump.h">
-      <Filter>Заголовочные файлы\lua</Filter>
-    </ClInclude>
-    <ClInclude Include="lua\lvm.h">
-      <Filter>Заголовочные файлы\lua</Filter>
-    </ClInclude>
-    <ClInclude Include="lua\lzio.h">
+    <ClInclude Include="lua\lctype.h">
       <Filter>Заголовочные файлы\lua</Filter>
     </ClInclude>
     <ClInclude Include="lua\ldebug.h">
@@ -147,32 +141,38 @@
     <ClInclude Include="lua\lstate.h">
       <Filter>Заголовочные файлы\lua</Filter>
     </ClInclude>
-    <ClInclude Include="lua\lapi.h">
+    <ClInclude Include="lua\lstring.h">
       <Filter>Заголовочные файлы\lua</Filter>
     </ClInclude>
-    <ClInclude Include="lua\lauxlib.h">
+    <ClInclude Include="lua\ltable.h">
       <Filter>Заголовочные файлы\lua</Filter>
     </ClInclude>
-    <ClInclude Include="lua\lcode.h">
+    <ClInclude Include="lua\ltm.h">
       <Filter>Заголовочные файлы\lua</Filter>
     </ClInclude>
-    <ClInclude Include="lua\lctype.h">
+    <ClInclude Include="lua\lua.h">
       <Filter>Заголовочные файлы\lua</Filter>
     </ClInclude>
     <ClInclude Include="lua\lua.hpp">
       <Filter>Заголовочные файлы\lua</Filter>
     </ClInclude>
-    <ClInclude Include="Scheduler.h">
-      <Filter>Заголовочные файлы</Filter>
+    <ClInclude Include="lua\luaconf.h">
+      <Filter>Заголовочные файлы\lua</Filter>
     </ClInclude>
-    <ClInclude Include="detours\detours.h">
+    <ClInclude Include="lua\lualib.h">
+      <Filter>Заголовочные файлы\lua</Filter>
+    </ClInclude>
+    <ClInclude Include="lua\lundump.h">
+      <Filter>Заголовочные файлы\lua</Filter>
+    </ClInclude>
+    <ClInclude Include="lua\lvm.h">
+      <Filter>Заголовочные файлы\lua</Filter>
+    </ClInclude>
+    <ClInclude Include="lua\lzio.h">
+      <Filter>Заголовочные файлы\lua</Filter>
+    </ClInclude>
+    <ClInclude Include="detours\detver.h">
       <Filter>Заголовочные файлы\detours</Filter>
-    </ClInclude>
-    <ClInclude Include="ScriptHooker.h">
-      <Filter>Заголовочные файлы</Filter>
-    </ClInclude>
-    <ClInclude Include="SHAutogen.h">
-      <Filter>Заголовочные файлы</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -215,28 +215,37 @@
     <ClCompile Include="Dangerous.cpp">
       <Filter>Файлы исходного кода</Filter>
     </ClCompile>
-    <ClCompile Include="lua\lstrlib.c">
+    <ClCompile Include="Scheduler.cpp">
+      <Filter>Файлы исходного кода</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptHooker.cpp">
+      <Filter>Файлы исходного кода</Filter>
+    </ClCompile>
+    <ClCompile Include="SHAutogen.cpp">
+      <Filter>Файлы исходного кода</Filter>
+    </ClCompile>
+    <ClCompile Include="lua\lapi.c">
       <Filter>Файлы исходного кода\lua</Filter>
     </ClCompile>
-    <ClCompile Include="lua\ltable.c">
+    <ClCompile Include="lua\lauxlib.c">
       <Filter>Файлы исходного кода\lua</Filter>
     </ClCompile>
-    <ClCompile Include="lua\ltablib.c">
+    <ClCompile Include="lua\lbaselib.c">
       <Filter>Файлы исходного кода\lua</Filter>
     </ClCompile>
-    <ClCompile Include="lua\ltm.c">
+    <ClCompile Include="lua\lcode.c">
       <Filter>Файлы исходного кода\lua</Filter>
     </ClCompile>
-    <ClCompile Include="lua\lundump.c">
+    <ClCompile Include="lua\lcorolib.c">
       <Filter>Файлы исходного кода\lua</Filter>
     </ClCompile>
-    <ClCompile Include="lua\lutf8lib.c">
+    <ClCompile Include="lua\lctype.c">
       <Filter>Файлы исходного кода\lua</Filter>
     </ClCompile>
-    <ClCompile Include="lua\lvm.c">
+    <ClCompile Include="lua\ldblib.c">
       <Filter>Файлы исходного кода\lua</Filter>
     </ClCompile>
-    <ClCompile Include="lua\lzio.c">
+    <ClCompile Include="lua\ldebug.c">
       <Filter>Файлы исходного кода\lua</Filter>
     </ClCompile>
     <ClCompile Include="lua\ldo.c">
@@ -287,42 +296,32 @@
     <ClCompile Include="lua\lstring.c">
       <Filter>Файлы исходного кода\lua</Filter>
     </ClCompile>
-    <ClCompile Include="lua\lapi.c">
+    <ClCompile Include="lua\lstrlib.c">
       <Filter>Файлы исходного кода\lua</Filter>
     </ClCompile>
-    <ClCompile Include="lua\lauxlib.c">
+    <ClCompile Include="lua\ltable.c">
       <Filter>Файлы исходного кода\lua</Filter>
     </ClCompile>
-    <ClCompile Include="lua\lbaselib.c">
+    <ClCompile Include="lua\ltablib.c">
       <Filter>Файлы исходного кода\lua</Filter>
     </ClCompile>
-    <ClCompile Include="lua\lcode.c">
+    <ClCompile Include="lua\ltm.c">
       <Filter>Файлы исходного кода\lua</Filter>
     </ClCompile>
-    <ClCompile Include="lua\lcorolib.c">
+    <ClCompile Include="lua\lundump.c">
       <Filter>Файлы исходного кода\lua</Filter>
     </ClCompile>
-    <ClCompile Include="lua\lctype.c">
+    <ClCompile Include="lua\lutf8lib.c">
       <Filter>Файлы исходного кода\lua</Filter>
     </ClCompile>
-    <ClCompile Include="lua\ldblib.c">
+    <ClCompile Include="lua\lvm.c">
       <Filter>Файлы исходного кода\lua</Filter>
     </ClCompile>
-    <ClCompile Include="lua\ldebug.c">
+    <ClCompile Include="lua\lzio.c">
       <Filter>Файлы исходного кода\lua</Filter>
-    </ClCompile>
-    <ClCompile Include="Scheduler.cpp">
-      <Filter>Файлы исходного кода</Filter>
-    </ClCompile>
-    <ClCompile Include="ScriptHooker.cpp">
-      <Filter>Файлы исходного кода</Filter>
-    </ClCompile>
-    <ClCompile Include="SHAutogen.cpp">
-      <Filter>Файлы исходного кода</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="lua54.dll" />
     <None Include="test.lua" />
   </ItemGroup>
   <ItemGroup>

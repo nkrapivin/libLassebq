@@ -296,6 +296,7 @@ void lassebq_luaPatch_GMLRoutine(CInstance* _pSelf, CInstance* _pOther)
 	if (g_EnableBeforeEvents)
 	{
 		std::string nn("Before" + mapOfEvents[evKey]);
+		YY_STACKTRACE_FUNC_ENTRY(nn.c_str(), 0);
 		lassebq_doLua(_pSelf, _pOther, nn.c_str());
 	}
 
@@ -540,33 +541,67 @@ void lassebq_patchObject()
 	std::cout << "Done! Did it work? :)" << std::endl;
 }
 
-void lassebq_make_obj_liblassebq()
+void lassebq_add_gmobject(const std::string& objectName, bool persistent, bool addtoroom)
 {
 	//lassebq_dbg();
 	lassebq_callr("object_add");
 	int obj_index = Result.asInt32();
-	std::cout << "libLassebq object index " << obj_index << std::endl;
 
 	// find our object.
 	CObjectGM *oNode = lassebq_find_obj(obj_index);
 	YYFree(oNode->m_pName);
-	oNode->m_pName = YYStrDup("obj_libLassebq");
+	oNode->m_pName = YYStrDup(objectName.c_str());
+	std::cout << "Added a new GMObject [name=" << objectName << ",index=" << obj_index << "]" << std::endl;
 	
 	// mark as persistent.
-	lassebq_callr("object_set_persistent", { obj_index, true });
+	if (persistent) {
+		lassebq_callr("object_set_persistent", { obj_index, true });
+	}
 
-	// Since Run_Room is NULL, we're not actually in any room just yet
-	// WHICH MEANS, WE CAN DO THIS:
-	lassebq_callr("room_instance_add", { 0.0, 0.0, 0.0, obj_index });
-	// room_instance_add our object at position 0;0
-	// first room only.
-	std::cout << "libLassebq object instance id " << Result.asInt32() << std::endl;
+	// obj_libLassebq only
+	if (addtoroom) {
+		// Since Run_Room is NULL, we're not actually in any room just yet
+		// WHICH MEANS, WE CAN DO THIS:
+		lassebq_callr("room_instance_add", { 0.0, 0.0, 0.0, obj_index });
+		// room_instance_add our object at position 0;0
+		// first room only.
+		std::cout << objectName << " instance id=" << Result.asInt32() << std::endl;
+	}
 
 	// do not modify or remove these two lines.
 #if defined(KZ_105_GOG) || defined(KZ_105_STEAM)
-	CObjectGM* speedrun_thing = lassebq_find_obj(EtoI(GameObjects::obj_speedrun_results_screen));
-	lassebq_addEvent(speedrun_thing, static_cast<int>(ev_draw), static_cast<int>(ev_gui_end), "libLassebq_antiSpeedrunCheat_DrawGUIEnd", lassebq_antiSpeedrunCheat_GMLRoutine);
+	static bool cherryMadeMeDoThis = false;
+	if (!cherryMadeMeDoThis) {
+		CObjectGM* speedrun_thing = lassebq_find_obj(EtoI(GameObjects::obj_speedrun_results_screen));
+		lassebq_addEvent(speedrun_thing, static_cast<int>(ev_draw), static_cast<int>(ev_gui_end), "libLassebq_antiSpeedrunCheat_DrawGUIEnd", lassebq_antiSpeedrunCheat_GMLRoutine);
+		cherryMadeMeDoThis = true;
+		std::cout << "KZ_ specific, antispeedruncheat ok!" << std::endl;
+	}
 #endif
+}
+
+void lassebq_parse_newobjects(const std::string& fileName) {
+	std::ifstream ifs(fileName);
+	
+	std::string line;
+	while (std::getline(ifs, line)) {
+		// invalid asset name, empty or only spaces(???)
+		if (line.empty() || line.find_first_not_of(' ') == line.npos)
+			continue;
+
+		// check if already exists by calling asset_get_index LOL.
+		// this will also check for conflicting scripts and other assets.
+		lassebq_callr("asset_get_index", { line });
+		double supposedInd = Result.asReal();
+
+		if (supposedInd < 0.0) // -1, or undefined, e.g. does not exist.
+			lassebq_add_gmobject(line, false, false);
+		else // ...huh? not -1?
+			std::cout << "You fool, you blongus, you human being, an asset " << line << " already exists >:(" << std::endl;
+	}
+
+	ifs.close();
+	std::cout << __FUNCTION__ << ": " << fileName << " loaded." << std::endl;
 }
 
 //#ifdef DITTO_WIN_STEAM
@@ -577,14 +612,12 @@ void lassebq_testDummyFunction()
 }
 //#endif
 
-void lassebq_initYYC()
-{
+void lassebq_initYYC() {
 	sch_begin();
 	atexit(sch_end);
 
 	InitGMLuaConfig();
-	if (!g_NoConsole)
-	{
+	if (!g_NoConsole) {
 		AllocConsoleQuick();
 
 		std::cout << "libLassebq by nkrapivindev, built for project " << PROJECT_NAME << std::endl;
@@ -600,7 +633,12 @@ void lassebq_initYYC()
 #ifdef DITTO_WIN_STEAM
 		std::cout << "DITTO_WIN_STEAM, The Swords of Ditto 1.17.05-205 STM" << std::endl;
 #endif
+#ifdef KZ_100_STEAM
+		std::cout << "KZ_100_STEAM, Katana Zero v1.0.5 Windows Steam" << std::endl;
+		std::cout << "Lassebq made me do this." << std::endl;
+#endif
 		std::cout << std::endl;
+
 		if (!g_ThrowErrors) std::cout << "Will ignore Lua errors, this is VERY evil and unstable!" << std::endl;
 		if (g_AddCollisionEvents) std::cout << "Collision event name generation enabled, loading times will be WAY slower." << std::endl;
 		if (g_AddScripts) std::cout << "GML script hooking enabled, loading times will be slowed down." << std::endl;
@@ -610,8 +648,7 @@ void lassebq_initYYC()
 	exeBase = GetModuleHandleW(nullptr);
 	uintptr_t exeAsUint = reinterpret_cast<uintptr_t>(exeBase);
 
-	if (!llbq_p1 || !llbq_p2 || !llbq_p3 || !llbq_p4)
-	{
+	if (!llbq_p1 || !llbq_p2 || !llbq_p3 || !llbq_p4) {
 		llbq_p1 = reinterpret_cast<char*>(ALT_DispatchAsync);
 		llbq_p2 = reinterpret_cast<char*>(ALT_CreateDsMap);
 		llbq_p3 = reinterpret_cast<char*>(ALT_DsMapAddDouble);
@@ -693,8 +730,12 @@ void lassebq_initYYC()
 	g_pGlobal = reinterpret_cast<YYObjectBase**>(exeAsUint + Global_YYObject_Addr);
 
 #ifndef DITTO_WIN_STEAM /* the heck ditto does? o_O */
-	lassebq_make_obj_liblassebq();
+	lassebq_add_gmobject("obj_libLassebq", true, true);
 #endif
+
+	if (g_CareAboutGMLuaObjects) {
+		lassebq_parse_newobjects("GMLuaNewObjects.txt");
+	}
 
 	//WaitForDebugger();
 	// I'd print authors and copyright before doing any lua stuff
@@ -742,6 +783,7 @@ funcR lassebq_init()
 	return 1.0;
 }
 
+const int REASON_window_close = -1;
 const int REASON_game_end = -100;
 const int REASON_game_restart = -200;
 const int REASON_game_load = -300;
@@ -750,7 +792,8 @@ const int REASON_game_end2 = -400;
 funcR lassebq_shutdown()
 {
 	int r = *g_New_Room;
-	if (r != REASON_game_end && r != REASON_game_end2)
+	std::cout << "r = " << r << std::endl;
+	if (r != REASON_window_close && r != REASON_game_end && r != REASON_game_end2)
 	{
 		// wrong end reason? :p
 		std::cout << "A friendly reminder, game_restart is evil, do not use this piece of shit please." << std::endl;

@@ -52,3 +52,4 @@ extern bool g_NoConsole;
 extern bool g_AddCollisionEvents;
 extern bool g_AddScripts;
 extern bool g_EnableBeforeEvents;
+extern bool g_CareAboutGMLuaObjects;

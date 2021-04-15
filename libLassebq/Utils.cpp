@@ -77,7 +77,7 @@ const char* GetRandomQuote()
 	srand(rndSeed);
 
 	// lel.
-	int rndValue = rand() % 17;
+	int rndValue = rand() % 18;
 	switch (rndValue)
 	{
 		case  0: return   "Never fear, the pug is here.";
@@ -104,7 +104,9 @@ const char* GetRandomQuote()
 		case 15: return   "cats are cool, at least they truly love you for who you are. =^-^=";
 
 		// what?
-		case 16: return   "This is the 17th quote, the last one, consider yourself lucky!";
+		case 16: return   "Now you're not limited by obj_libLassebq!";
+		case 17: return   "what a lazy piece of shit nik is. it took him two days to make this update.";
+			//				... even though it could've been done in a few hours.
 		default: return   "Wtf? You're not supposed to see this quote.";
 	}
 }

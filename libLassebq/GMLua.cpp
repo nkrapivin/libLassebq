@@ -15,6 +15,7 @@ bool g_NoConsole = false;
 bool g_IgnoreArgc = false;
 bool g_AddScripts = false;
 bool g_EnableBeforeEvents = false;
+bool g_CareAboutGMLuaObjects = false;
 
 /*
  *  Why:
@@ -446,6 +447,10 @@ void InitGMLuaConfig(void)
 		else if (line == "enableBeforeEvents")
 		{
 			g_EnableBeforeEvents = true;
+		}
+		else if (line == "iWannaMakeMyOwnObjectsKthx")
+		{
+			g_CareAboutGMLuaObjects = true;
 		}
 	}
 	cfg.close();

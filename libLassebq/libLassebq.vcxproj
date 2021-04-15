@@ -159,12 +159,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <Text Include="ReadMe.txt" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="Dangerous.h" />
     <ClInclude Include="Data.h" />
     <ClInclude Include="detours\detours.h" />
+    <ClInclude Include="detours\detver.h" />
     <ClInclude Include="GameSpecific.h" />
     <ClInclude Include="GMLConstants.h" />
     <ClInclude Include="GMLFuncs.h" />
@@ -276,7 +274,6 @@
     <ClCompile Include="Utils.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="lua54.dll" />
     <None Include="test.lua" />
   </ItemGroup>
   <ItemGroup>
