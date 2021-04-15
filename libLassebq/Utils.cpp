@@ -105,8 +105,8 @@ const char* GetRandomQuote()
 
 		// what?
 		case 16: return   "Now you're not limited by obj_libLassebq!";
-		case 17: return   "what a lazy piece of shit nik is. it took him two days to make this update.";
-			//				... even though it could've been done in a few hours.
+		case 17: return   "what a great person nik is. he made such a great update to libLassebq!";
+			//				... and it doesn't matter how much time it took him to do this!
 		default: return   "Wtf? You're not supposed to see this quote.";
 	}
 }
