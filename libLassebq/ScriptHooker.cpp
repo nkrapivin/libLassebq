@@ -1,5 +1,13 @@
 #include "ScriptHooker.h"
 #include "SHAutogen.h"
+void SH_pushCInstance(lua_State* _pL, CInstance* _pInst)
+{
+	CInstance** luaSelf = reinterpret_cast<CInstance**>(lua_newuserdata(lS, sizeof(CInstance*)));
+	*luaSelf = _pInst;
+	luaL_getmetatable(lS, "__libLassebq_GMLInstance_metatable");
+	lua_setmetatable(lS, -2);
+}
+
 #if USE_DETOURS
 
 int getAutogenTableSize()
@@ -13,13 +21,7 @@ int getAutogenTableSize()
 	}
 }
 
-void SH_pushCInstance(lua_State* _pL, CInstance* _pInst)
-{
-	CInstance** luaSelf = reinterpret_cast<CInstance**>(lua_newuserdata(lS, sizeof(CInstance*)));
-	*luaSelf = _pInst;
-	luaL_getmetatable(lS, "__libLassebq_GMLInstance_metatable");
-	lua_setmetatable(lS, -2);
-}
+
 
 void SH_pushScriptArgs(lua_State* _pL, const int _count, const RValue** _args)
 {

@@ -1,6 +1,6 @@
 #pragma once
 #include "Data.h"
-
+const int FLAG_deactivated = 1;
 struct YYRoom
 {
 	const char* pName;

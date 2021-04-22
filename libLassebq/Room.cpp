@@ -5,7 +5,7 @@ CRoom** g_RunRoom = nullptr; // this variable was only used to find instances, i
 CHash<CInstance>* g_CInstanceHashList = nullptr;
 int* g_New_Room = nullptr;
 
-const int FLAG_deactivated = 1;
+
 
 CInstance* lass_find_CInstance_QUICK(int obj_index) {
 

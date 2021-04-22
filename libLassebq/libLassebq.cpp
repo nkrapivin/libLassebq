@@ -157,14 +157,8 @@ bool lassebq_doLua(CInstance* _pSelf, CInstance* _pOther, const char* _pLFName) 
 						{
 							// push pSelf/pOther as arguments to the function call...
 							// TODO: wrappers?
-							CInstance** luaSelf = reinterpret_cast<CInstance**>(lua_newuserdata(lS, sizeof(CInstance*)));
-							*luaSelf = _pSelf;
-							luaL_getmetatable(lS, "__libLassebq_GMLInstance_metatable");
-							lua_setmetatable(lS, -2);
-							CInstance** luaOther = reinterpret_cast<CInstance**>(lua_newuserdata(lS, sizeof(CInstance*)));
-							*luaOther = _pOther;
-							luaL_getmetatable(lS, "__libLassebq_GMLInstance_metatable");
-							lua_setmetatable(lS, -2);
+							SH_pushCInstance(lS, _pSelf);
+							SH_pushCInstance(lS, _pOther);
 
 							// renew _pGlobal
 							RenewGlobal(lS);

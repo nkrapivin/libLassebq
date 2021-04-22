@@ -753,11 +753,13 @@ int lua_GMLua_setvar(lua_State* _pL)
 	return 0;
 }
 
-const lua_Integer GM_global = -5l;
-const lua_Integer GM_noone = -4l;
-const lua_Integer GM_all = -3l;
-const lua_Integer GM_other = -2l;
-const lua_Integer GM_self = -1l;
+enum GM_instance_type : lua_Integer {
+	GM_global = -5l,
+	GM_noone = -4l,
+	GM_all = -3l,
+	GM_other = -2l,
+	GM_self = -1l
+};
 
 int lua_GMLua_inst(lua_State* _pL)
 {
@@ -794,10 +796,7 @@ int lua_GMLua_inst(lua_State* _pL)
 		}
 		else
 		{
-			CInstance** luaSelf = reinterpret_cast<CInstance**>(lua_newuserdata(lS, sizeof(CInstance*)));
-			*luaSelf = inst;
-			luaL_getmetatable(lS, "__libLassebq_GMLInstance_metatable");
-			lua_setmetatable(lS, -2);
+			SH_pushCInstance(_pL, inst);
 		}
 
 		return 1;
@@ -841,6 +840,155 @@ int lua_DumpGMLVarids(lua_State* _pL)
 	return 0;
 }
 
+int lua_GMLua_setSelf(lua_State* _pL)
+{
+	int Largc = lua_gettop(_pL); // get argument count.
+	if (Largc < 1)
+	{
+		return luaL_error(_pL, __FUNCTION__ " error: invalid argument count, expected 1, got %d.", Largc);
+	}
+
+	if (lua_isuserdata(_pL, 1))
+	{
+		CInstance** luaInst = reinterpret_cast<CInstance**>(luaL_checkudata(_pL, 1, "__libLassebq_GMLInstance_metatable"));
+		if (luaInst == nullptr)
+		{
+			return luaL_error(_pL, __FUNCTION__ " error: argument is userdata, but isn't GMLInstance.");
+		}
+
+		g_Self = *luaInst;
+	}
+	else
+	{
+		return luaL_error(_pL, __FUNCTION__ " error: argument is not userdata, it is %s.", lua_typename(_pL, lua_type(_pL, 1)));
+	}
+
+	return 0;
+}
+
+// please give hugs to cherryjam.
+int cherry_with_wrapper(lua_State* _pL, CInstance* self, CInstance* other, int fIndex)
+{
+	CInstance* oldOther = g_Other;
+	CInstance* oldSelf = g_Self;
+
+	g_Other = other;
+	g_Self = self;
+
+	int r = -1;
+	int oldtop = lua_gettop(_pL);
+	lua_pushvalue(_pL, fIndex);
+	SH_pushCInstance(_pL, self);
+	SH_pushCInstance(_pL, other);
+	RenewGlobal(_pL);
+
+	r = lua_pcall(_pL, 2, LUA_MULTRET, 0);
+	g_Self = oldSelf;
+	g_Other = oldOther;
+	if (r != LUA_OK)
+	{
+		const char* errmsg = lua_tostring(_pL, -1);
+		if (g_ThrowErrors)
+		{
+			YYError("Lua Error: lua_pcall failed with result %d in A WITH STATEMENT.\r\nDetails:\r\n%s\r\n", r, errmsg);
+		}
+		lua_pop(_pL, 1);
+	}
+	int newtop = lua_gettop(_pL);
+
+	if (oldtop == newtop)
+	{
+		return 0;
+	}
+	else
+	{
+		int diff = newtop - oldtop;
+		std::cout << "with, diff=" << diff << std::endl;
+		lua_pop(_pL, diff);
+		return diff;
+	}
+}
+
+int cherry_with_gmobject(lua_State* _pL, int objIndex, int fIndex)
+{
+	// any instances of this object exist in the first place.
+	CInstance* first = (*g_RunRoom)->m_Active.m_pFirst;
+	for (int i = 0; first != nullptr; i++)
+	{
+		if ((objIndex < 0) || (first->i_object_index == objIndex || first->m_pObject->m_parent == objIndex))
+		{
+			int diff = cherry_with_wrapper(_pL, first, g_Self, fIndex);
+			if (diff != 0)
+			{
+				// there was more than 0 elements returned, break!
+				break;
+			}
+		}
+
+		first = first->m_pNext;
+	}
+
+	return 0;
+}
+
+int lua_GMLua_with(lua_State* _pL)
+{
+	int Largc = lua_gettop(_pL); // argument count
+	if (Largc < 2)
+	{
+		return luaL_error(_pL, __FUNCTION__ " error: invalid argument count, expected 2, got %d.", Largc);
+	}
+
+	// GMLua_inst(noone) will return nil.
+	if (lua_isnil(_pL, 1)) return 0;
+
+	// *sigh*
+	if (!lua_isfunction(_pL, 2))
+	{
+		return luaL_error(_pL, __FUNCTION__ " error: invalid argument 2, expected a function.");
+	}
+
+	// all?
+	if (lua_isinteger(_pL, 1))
+	{
+		lua_Integer wtf = lua_tointeger(_pL, 1);
+		std::cout << __FUNCTION__ << " wtf=" << wtf << std::endl;
+		if (wtf == GM_noone) return 0;
+		if (wtf >= 0 && wtf < 100000) // an object index, loop through all instances of that object.
+		{
+			cherry_with_gmobject(_pL, static_cast<int>(wtf), 2);
+		}
+		else if (wtf >= 100000) // instance id, auto cast to GMLInstance
+		{
+			CInstance* inst = lass_find_CInstance_QUICK(static_cast<int>(wtf));
+			if (inst == nullptr)
+			{
+				return luaL_error(_pL, __FUNCTION__ " error, passed instance id %lld is invalid, do you need sleep?", wtf);
+			}
+			cherry_with_wrapper(_pL, inst, g_Self, 2);
+		}
+		else if (wtf == GM_all)
+		{
+			cherry_with_gmobject(_pL, -1, 2); // -1 - doesn't matter which object, if it exists, do.
+		}
+		else
+		{
+			return luaL_error(_pL, __FUNCTION__ " error, dude go to sleep seriously, hug a pillow and have rest. %lld", wtf);
+		}
+	}
+	else // directly passed GMLInstance 'class'
+	{
+		CInstance** luaInst = reinterpret_cast<CInstance**>(luaL_checkudata(_pL, 1, "__libLassebq_GMLInstance_metatable"));
+		if (luaInst == nullptr)
+		{
+			return luaL_error(_pL, __FUNCTION__ " error, passed CInstance is not actually a GMLInstance, are you tired?");
+		}
+		cherry_with_wrapper(_pL, *luaInst, g_Self, 2);
+	}
+
+	return 0;
+}
+
 void RegisterFunctions(lua_State* _pL)
 {
 	std::cout << "Registering functions... ";
@@ -873,6 +1021,8 @@ void RegisterFunctions(lua_State* _pL)
 	lua_register(_pL, "GMLua_getcallbacks", lua_GMLua_getcallbacks);
 	lua_register(_pL, "GMLua_dumpvarids", lua_DumpGMLVarids);
 	lua_register(_pL, "GMLua_detour_debug_mode_var", lua_GMLua_detour_debug_mode_var);
+	lua_register(_pL, "GMLua_setSelf", lua_GMLua_setSelf);
+	lua_register(_pL, "GMLua_with", lua_GMLua_with);
 	std::cout << "Done!" << std::endl;
 }
 
@@ -1242,14 +1392,7 @@ void RenewGlobal(lua_State* _pL)
 {
 	// global object may be relocated from time to time...
 	// gotta renew it sometimes.
-
-	CInstance** luaGlobal = reinterpret_cast<CInstance**>(lua_newuserdata(_pL, sizeof(CInstance*)));
-
-	// this is wrong, will likely break stuff, but who cares.
-	*luaGlobal = reinterpret_cast<CInstance*>(*g_pGlobal);
-
-	luaL_getmetatable(_pL, "__libLassebq_GMLInstance_metatable");
-	lua_setmetatable(_pL, -2);
+	SH_pushCInstance(_pL, reinterpret_cast<CInstance*>(*g_pGlobal));
 	lua_setglobal(_pL, "_pGlobal");
 }
 
