@@ -949,7 +949,7 @@ int lua_GMLua_with(lua_State* _pL)
 	}
 
 	// all?
-	if (lua_isinteger(_pL, 1))
+	if (lua_isinteger(_pL, 1) || lua_isnumber(_pL, 1))
 	{
 		lua_Integer wtf = lua_tointeger(_pL, 1);
 		std::cout << __FUNCTION__ << " wtf=" << wtf << std::endl;
